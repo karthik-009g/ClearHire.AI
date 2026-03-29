@@ -163,7 +163,7 @@ Create `backend/.env` with:
 
 ```env
 # Database
-DATABASE_URL=postgresql://user:password@localhost:5432/clearhire
+DATABASE_URL=DATABASE_URL=postgresql://<user>:<password>@localhost:5432/clearhire
 
 # Auth
 SECRET_KEY=your-secret-key-here
