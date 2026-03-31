@@ -1,0 +1,140 @@
+:root {
+  --bg: #f5f8ff;
+  --bg-accent: #dff4ff;
+  --panel: #ffffff;
+  --ink: #14213d;
+  --ink-soft: #3d4a66;
+  --line: #d3deef;
+  --brand: #0077b6;
+  --brand-dark: #005f92;
+  --ok: #137547;
+  --error: #9c1c2e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+  color: var(--ink);
+  background: radial-gradient(circle at 10% 0%, var(--bg-accent), var(--bg));
+}
+
+.page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px 16px 40px;
+}
+
+.hero {
+  margin-bottom: 14px;
+}
+
+.eyebrow {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.sub {
+  margin-top: 4px;
+  color: var(--ink-soft);
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  margin: 10px 0;
+  box-shadow: 0 8px 20px rgba(20, 33, 61, 0.06);
+}
+
+input,
+textarea,
+button {
+  width: 100%;
+  margin-top: 8px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  padding: 10px;
+  font-size: 14px;
+}
+
+textarea {
+  resize: vertical;
+}
+
+button {
+  cursor: pointer;
+  background: var(--brand);
+  border: none;
+  color: white;
+  font-weight: 600;
+}
+
+button:hover {
+  background: var(--brand-dark);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.check input {
+  width: auto;
+  margin: 0;
+}
+
+.ok {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.error {
+  color: var(--error);
+  font-weight: 600;
+}
+
+pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  background: #f9fbff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+@media (max-width: 720px) {
+  .grid,
+  .actions {
+    grid-template-columns: 1fr;
+  }
+}
