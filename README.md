@@ -1,4 +1,4 @@
-# jobswithc.ai
+# ClearHire.AI
 # 🚀 ClearHire.ai — AI-Powered Job Application Assistant
 
 > **A full-stack AI product built to help candidates land jobs smarter — not harder.**
