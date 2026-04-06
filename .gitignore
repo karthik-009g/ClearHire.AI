@@ -143,3 +143,6 @@ app.ps1
 # Runtime/cache folders
 frontend/.run/
 backend/storage/
+
+# Ignore downloaded resumes/storage (from remote)
+storage/resumes/
