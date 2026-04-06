@@ -31,6 +31,42 @@ class MatchResponse(BaseModel):
     explanation: dict
 
 
+class ReconciledMatchRequest(BaseModel):
+    resume_id: str
+    jd_text: str = Field(min_length=20)
+    title: str | None = None
+    company: str | None = None
+    source: str | None = None
+    top_k: int = Field(default=5, ge=1, le=20)
+
+
+class EvidenceItem(BaseModel):
+    source_table: str
+    source_id: int
+    title: str | None
+    company: str | None
+    similarity: float
+    snippet: str
+
+
+class ReconciledMatchResponse(BaseModel):
+    match_id: int
+    status: str
+    keyword_score: float
+    embedding_score: float
+    total_score: float
+    retrieval_score: float | None
+    retrieval_top_k: int
+    reconciliation_status: str
+    reconciliation_confidence: float
+    abstained: bool
+    abstain_reason: str | None
+    answer: str | None
+    evidence: list[EvidenceItem]
+    explanation: dict
+    latency_ms: int
+
+
 class ResumeDetailResponse(BaseModel):
     id: str
     original_filename: str

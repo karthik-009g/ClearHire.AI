@@ -8,6 +8,8 @@ from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, Stri
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+from app.models.vector_type import EmbeddingVector
+from app.utils.config import settings
 
 
 class JobPosting(Base):
@@ -22,6 +24,10 @@ class JobPosting(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     score: Mapped[float | None] = mapped_column(Float, nullable=True)
     embedding: Mapped[list[float] | None] = mapped_column(JSON, nullable=True)
+    embedding_vector: Mapped[list[float] | None] = mapped_column(
+        EmbeddingVector(settings.embedding_dimensions),
+        nullable=True,
+    )
     scraped_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, index=True)
 
 

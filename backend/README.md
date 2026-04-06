@@ -83,6 +83,21 @@ JWT_EXPIRATION_HOURS=24
 # App Config
 DEBUG=false
 ENVIRONMENT=production
+
+# LLM / RAG (Phase 1)
+LLM_PROVIDER=groq
+GROQ_API_KEY=gsk_xxxxx
+GROQ_MODEL=llama-3.3-70b-versatile
+EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
+EMBEDDING_DIMENSIONS=384
+RAG_TOP_K=5
+RAG_SIMILARITY_THRESHOLD=0.35
+RAG_ABSTAIN_THRESHOLD=0.55
+RAG_RECONCILE_MIN_OVERLAP=0.50
+RAG_ENABLE_PGVECTOR=true
+EVALUATION_ENABLED=true
+EVALUATION_DEFAULT_K=5
+EVALUATION_LATENCY_TARGET_MS_P95=2500
 ```
 
 ## Database Models
@@ -146,6 +161,7 @@ ENVIRONMENT=production
 - `GET /api/resumes` - List user resumes
 - `POST /api/resumes/upload` - Upload resume
 - `POST /api/resumes/{id}/optimize` - Optimize for job
+- `POST /api/resumes/match/reconciled` - Retrieval + reconciler guarded match with abstain support
 
 ### Scheduler
 - `POST /api/scheduler/start` - Start automation
@@ -209,6 +225,12 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --app-dir .
 # Run tests
 pytest -v
 
+# Run labeled RAG evaluation (Phase 1)
+python -m app.evaluation.run_evaluation --dataset app/evaluation/datasets/reconciled_match_eval_20.json --output app/evaluation/reports/latest_metrics.json
+
+# Backfill vector columns after migration
+python -m app.scripts.backfill_vectors
+
 # Check code quality
 black app/
 flake8 app/
@@ -267,3 +289,5 @@ See `/deployment` directory for Docker, AWS, and Kubernetes setup.
 	- `auto_scrape_on_login`
 	- `auto_email_after_scrape`
 - Autofill endpoint `/api/applications/autofill` is currently on hold and returns `503`.
+- RAG Phase 1 schema foundation is available in Alembic revision `20260331_0006`.
+- `match_results` now includes reconciliation metadata (`reconciliation_status`, `abstained`, reasons) for guardrail auditing.

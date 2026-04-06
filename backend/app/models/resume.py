@@ -9,6 +9,8 @@ from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.models.vector_type import EmbeddingVector
+from app.utils.config import settings
 
 
 class Resume(Base):
@@ -35,6 +37,10 @@ class ResumeVersion(Base):
     version_no: Mapped[int] = mapped_column(Integer, nullable=False)
     content_text: Mapped[str] = mapped_column(Text, nullable=False)
     embedding: Mapped[list[float] | None] = mapped_column(JSON, nullable=True)
+    embedding_vector: Mapped[list[float] | None] = mapped_column(
+        EmbeddingVector(settings.embedding_dimensions),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
     resume: Mapped[Resume] = relationship("Resume", back_populates="versions")
@@ -48,6 +54,10 @@ class JobDescription(Base):
     company: Mapped[str | None] = mapped_column(String(255), nullable=True)
     source: Mapped[str | None] = mapped_column(String(255), nullable=True)
     jd_text: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding_vector: Mapped[list[float] | None] = mapped_column(
+        EmbeddingVector(settings.embedding_dimensions),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
     matches: Mapped[list[MatchResult]] = relationship("MatchResult", back_populates="job_description", cascade="all, delete-orphan")
@@ -62,8 +72,16 @@ class MatchResult(Base):
     keyword_score: Mapped[float] = mapped_column(nullable=False)
     embedding_score: Mapped[float] = mapped_column(nullable=False)
     total_score: Mapped[float] = mapped_column(nullable=False, index=True)
+    retrieval_score: Mapped[float | None] = mapped_column(nullable=True)
+    retrieval_top_k: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    retrieved_context: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     gaps: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     explanation: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    reconciliation_status: Mapped[str] = mapped_column(String(32), nullable=False, default="not_checked", index=True)
+    reconciliation_confidence: Mapped[float | None] = mapped_column(nullable=True)
+    reconciliation_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    abstained: Mapped[bool] = mapped_column(nullable=False, default=False, index=True)
+    abstain_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
     resume: Mapped[Resume] = relationship("Resume", back_populates="matches")

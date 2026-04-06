@@ -1,0 +1,323 @@
+{
+  "top_k": 5,
+  "hallucination_terms": [
+    "python",
+    "fastapi",
+    "postgresql",
+    "java",
+    "spring",
+    "react",
+    "typescript",
+    "kubernetes",
+    "terraform",
+    "llm",
+    "rag",
+    "pytorch",
+    "c",
+    "cpp",
+    "firmware",
+    "selenium",
+    "cypress",
+    "security",
+    "siem",
+    "nlp",
+    "transformers",
+    "node",
+    "aws",
+    "docker"
+  ],
+  "jobs": [
+    {
+      "id": 1,
+      "source": "naukri",
+      "company": "Alpha Systems",
+      "title": "Backend Engineer",
+      "description": "Build Python FastAPI microservices, PostgreSQL data models, and REST APIs for hiring workflows."
+    },
+    {
+      "id": 2,
+      "source": "linkedin",
+      "company": "Nexa AI",
+      "title": "NLP Data Scientist",
+      "description": "Develop NLP pipelines, transformer models, and experimentation workflows for text analytics products."
+    },
+    {
+      "id": 3,
+      "source": "naukri",
+      "company": "CloudOps Labs",
+      "title": "DevOps Engineer",
+      "description": "Own Kubernetes, Terraform, CI/CD, Docker, and cloud reliability for distributed backend services."
+    },
+    {
+      "id": 4,
+      "source": "linkedin",
+      "company": "Pixel Foundry",
+      "title": "Frontend Engineer",
+      "description": "Build React TypeScript user interfaces, state management, and performance tuning for web products."
+    },
+    {
+      "id": 5,
+      "source": "naukri",
+      "company": "ChipWorks",
+      "title": "Embedded Firmware Engineer",
+      "description": "Develop embedded C and C++ firmware, board bring-up, and low-level device driver integration."
+    },
+    {
+      "id": 6,
+      "source": "linkedin",
+      "company": "BetaSoft",
+      "title": "Java Backend Engineer",
+      "description": "Design Java Spring Boot APIs, relational data models, and backend services for enterprise platforms."
+    },
+    {
+      "id": 7,
+      "source": "linkedin",
+      "company": "VectorLabs",
+      "title": "LLM Engineer",
+      "description": "Ship RAG systems, prompt design, vector retrieval, and model evaluation for production AI assistants."
+    },
+    {
+      "id": 8,
+      "source": "naukri",
+      "company": "TestMint",
+      "title": "QA Automation Engineer",
+      "description": "Automate end-to-end tests with Selenium and Cypress, improve release quality, and maintain pipelines."
+    },
+    {
+      "id": 9,
+      "source": "linkedin",
+      "company": "Secura",
+      "title": "Security Engineer",
+      "description": "Lead security monitoring, SIEM operations, incident response, and cloud hardening practices."
+    },
+    {
+      "id": 10,
+      "source": "naukri",
+      "company": "WebCore",
+      "title": "Full Stack Engineer",
+      "description": "Build Node.js APIs and React frontends, integrate PostgreSQL, and deploy to cloud platforms."
+    }
+  ],
+  "samples": [
+    {
+      "sample_id": "s01",
+      "resume_text": "Python backend engineer with FastAPI, PostgreSQL, and API delivery for web products.",
+      "resume_skills": ["python", "fastapi", "postgresql"],
+      "jd_text": "Need backend engineer to build FastAPI services and PostgreSQL APIs.",
+      "title": "Backend Engineer",
+      "company": "Alpha Systems",
+      "expected_status": "valid",
+      "relevant_job_ids": [1],
+      "job_ids_in_scope": [1, 6, 10]
+    },
+    {
+      "sample_id": "s02",
+      "resume_text": "Java Spring Boot developer with API and database experience.",
+      "resume_skills": ["java", "spring"],
+      "jd_text": "Looking for Java backend engineer with Spring and REST APIs.",
+      "title": "Java Backend Engineer",
+      "company": "BetaSoft",
+      "expected_status": "valid",
+      "relevant_job_ids": [6],
+      "job_ids_in_scope": [1, 6, 10]
+    },
+    {
+      "sample_id": "s03",
+      "resume_text": "Frontend engineer with React, TypeScript, and web performance optimization.",
+      "resume_skills": ["react", "typescript"],
+      "jd_text": "Hiring React TypeScript frontend engineer for UI product delivery.",
+      "title": "Frontend Engineer",
+      "company": "Pixel Foundry",
+      "expected_status": "valid",
+      "relevant_job_ids": [4],
+      "job_ids_in_scope": [4, 10]
+    },
+    {
+      "sample_id": "s04",
+      "resume_text": "DevOps engineer with Kubernetes, Terraform, Docker, and CI/CD pipelines.",
+      "resume_skills": ["kubernetes", "terraform", "docker"],
+      "jd_text": "Need DevOps engineer for Kubernetes operations and Terraform infrastructure.",
+      "title": "DevOps Engineer",
+      "company": "CloudOps Labs",
+      "expected_status": "valid",
+      "relevant_job_ids": [3],
+      "job_ids_in_scope": [3, 1]
+    },
+    {
+      "sample_id": "s05",
+      "resume_text": "AI engineer building RAG systems, vector retrieval, and LLM prompt workflows.",
+      "resume_skills": ["llm", "rag", "python"],
+      "jd_text": "Seeking LLM engineer with RAG and vector search production experience.",
+      "title": "LLM Engineer",
+      "company": "VectorLabs",
+      "expected_status": "valid",
+      "relevant_job_ids": [7],
+      "job_ids_in_scope": [7, 2, 1]
+    },
+    {
+      "sample_id": "s06",
+      "resume_text": "Embedded developer with C and C++ firmware and driver integration experience.",
+      "resume_skills": ["c", "cpp", "firmware"],
+      "jd_text": "Embedded firmware engineer required for C++ device software and board bring-up.",
+      "title": "Embedded Firmware Engineer",
+      "company": "ChipWorks",
+      "expected_status": "valid",
+      "relevant_job_ids": [5],
+      "job_ids_in_scope": [5, 1]
+    },
+    {
+      "sample_id": "s07",
+      "resume_text": "QA automation engineer with Selenium, Cypress, and test pipeline ownership.",
+      "resume_skills": ["selenium", "cypress"],
+      "jd_text": "Need QA automation engineer to build Selenium and Cypress suites.",
+      "title": "QA Automation Engineer",
+      "company": "TestMint",
+      "expected_status": "valid",
+      "relevant_job_ids": [8],
+      "job_ids_in_scope": [8, 4]
+    },
+    {
+      "sample_id": "s08",
+      "resume_text": "Security engineer handling SIEM alerts, incident response, and cloud hardening.",
+      "resume_skills": ["security", "siem"],
+      "jd_text": "Security engineer role focused on SIEM, response workflows, and risk reduction.",
+      "title": "Security Engineer",
+      "company": "Secura",
+      "expected_status": "valid",
+      "relevant_job_ids": [9],
+      "job_ids_in_scope": [9, 3]
+    },
+    {
+      "sample_id": "s09",
+      "resume_text": "Data scientist with NLP modeling, transformers, and text experimentation.",
+      "resume_skills": ["nlp", "transformers"],
+      "jd_text": "NLP data scientist needed for transformer-based text analytics.",
+      "title": "NLP Data Scientist",
+      "company": "Nexa AI",
+      "expected_status": "valid",
+      "relevant_job_ids": [2],
+      "job_ids_in_scope": [2, 7]
+    },
+    {
+      "sample_id": "s10",
+      "resume_text": "Full stack engineer with Node.js backend, React frontend, and PostgreSQL.",
+      "resume_skills": ["node", "react", "postgresql"],
+      "jd_text": "Need full stack developer for Node APIs and React applications.",
+      "title": "Full Stack Engineer",
+      "company": "WebCore",
+      "expected_status": "valid",
+      "relevant_job_ids": [10],
+      "job_ids_in_scope": [10, 4, 1]
+    },
+    {
+      "sample_id": "s11",
+      "resume_text": "Biomedical researcher focusing on clinical trial design and molecular assays.",
+      "resume_skills": ["biology", "clinical"],
+      "jd_text": "Clinical diagnostics scientist role for wet-lab experiment planning.",
+      "title": "Clinical Scientist",
+      "company": "BioLab",
+      "expected_status": "no_match",
+      "relevant_job_ids": [],
+      "job_ids_in_scope": []
+    },
+    {
+      "sample_id": "s12",
+      "resume_text": "Mechanical design engineer for turbine systems and thermal simulation.",
+      "resume_skills": ["cad", "thermal"],
+      "jd_text": "Need mechanical engineer for turbine CAD workflows.",
+      "title": "Mechanical Engineer",
+      "company": "TurbineX",
+      "expected_status": "no_match",
+      "relevant_job_ids": [],
+      "job_ids_in_scope": []
+    },
+    {
+      "sample_id": "s13",
+      "resume_text": "Backend engineer experienced in APIs, databases, and service design.",
+      "resume_skills": ["python", "java", "apis"],
+      "jd_text": "Hiring backend engineer for API services and relational databases.",
+      "title": "Backend Engineer",
+      "company": "Alpha Systems",
+      "expected_status": "ambiguous",
+      "relevant_job_ids": [1, 6],
+      "job_ids_in_scope": [1, 6]
+    },
+    {
+      "sample_id": "s14",
+      "resume_text": "Software engineer with backend APIs and distributed service implementation.",
+      "resume_skills": ["python", "java", "postgresql"],
+      "jd_text": "Need software engineer for backend API architecture and service integrations.",
+      "title": "Software Engineer",
+      "company": "Unknown",
+      "expected_status": "ambiguous",
+      "relevant_job_ids": [1, 6],
+      "job_ids_in_scope": [1, 6]
+    },
+    {
+      "sample_id": "s15",
+      "resume_text": "ML engineer delivering retrieval pipelines, prompt templates, and eval dashboards.",
+      "resume_skills": ["llm", "rag", "python"],
+      "jd_text": "LLM role requiring retrieval augmented generation and model evaluation.",
+      "title": "LLM Engineer",
+      "company": "VectorLabs",
+      "expected_status": "valid",
+      "relevant_job_ids": [7],
+      "job_ids_in_scope": [7, 2, 3]
+    },
+    {
+      "sample_id": "s16",
+      "resume_text": "Cloud reliability engineer with Kubernetes operations and infrastructure automation.",
+      "resume_skills": ["kubernetes", "terraform", "aws"],
+      "jd_text": "DevOps role for cloud reliability, Kubernetes, Terraform and CI pipelines.",
+      "title": "DevOps Engineer",
+      "company": "CloudOps Labs",
+      "expected_status": "valid",
+      "relevant_job_ids": [3],
+      "job_ids_in_scope": [3, 8, 10]
+    },
+    {
+      "sample_id": "s17",
+      "resume_text": "Academic historian writing archival research on medieval trade routes.",
+      "resume_skills": ["history", "archives"],
+      "jd_text": "Looking for historian to lead archival research program.",
+      "title": "Historian",
+      "company": "MuseumWorks",
+      "expected_status": "no_match",
+      "relevant_job_ids": [],
+      "job_ids_in_scope": []
+    },
+    {
+      "sample_id": "s18",
+      "resume_text": "NLP researcher with transformer fine-tuning and semantic search systems.",
+      "resume_skills": ["nlp", "transformers", "python"],
+      "jd_text": "Need NLP specialist for transformer text understanding and retrieval.",
+      "title": "NLP Data Scientist",
+      "company": "Nexa AI",
+      "expected_status": "valid",
+      "relevant_job_ids": [2],
+      "job_ids_in_scope": [2, 7, 1]
+    },
+    {
+      "sample_id": "s19",
+      "resume_text": "Test engineer automating UI flows with Selenium and Cypress frameworks.",
+      "resume_skills": ["selenium", "cypress"],
+      "jd_text": "QA automation role for Selenium browser suites and release quality.",
+      "title": "QA Automation Engineer",
+      "company": "TestMint",
+      "expected_status": "valid",
+      "relevant_job_ids": [8],
+      "job_ids_in_scope": [8, 4, 10]
+    },
+    {
+      "sample_id": "s20",
+      "resume_text": "Backend API engineer with FastAPI, SQL, and production service ownership.",
+      "resume_skills": ["python", "fastapi", "postgresql"],
+      "jd_text": "Backend role focused on Python API delivery and PostgreSQL data services.",
+      "title": "Backend Engineer",
+      "company": "Alpha Systems",
+      "expected_status": "valid",
+      "relevant_job_ids": [1],
+      "job_ids_in_scope": [1, 6, 10]
+    }
+  ]
+}

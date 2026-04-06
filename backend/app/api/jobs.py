@@ -115,6 +115,8 @@ def scrape_jobs(
     if resume_version:
         if not resume_version.embedding:
             resume_version.embedding = matcher.embed_text(resume_version.content_text)
+        if not resume_version.embedding_vector:
+            resume_version.embedding_vector = resume_version.embedding
         resume_embedding = resume_version.embedding
 
     persisted: list[JobPosting] = []
@@ -128,6 +130,7 @@ def scrape_jobs(
             existing.source = item.source
             existing.description = item.description
             existing.embedding = embedding
+            existing.embedding_vector = embedding
             existing.scraped_at = datetime.utcnow()
             persisted.append(existing)
             continue
@@ -140,6 +143,7 @@ def scrape_jobs(
             url=item.url,
             description=item.description,
             embedding=embedding,
+            embedding_vector=embedding,
             scraped_at=item.scraped_at,
         )
         db.add(row)
@@ -277,6 +281,8 @@ def send_matched_jobs_digest(
 
     if not latest_version.embedding:
         latest_version.embedding = matcher.embed_text(latest_version.content_text)
+    if not latest_version.embedding_vector:
+        latest_version.embedding_vector = latest_version.embedding
 
     source_keys = _effective_sources(request.sources)
     scraped = scraper.scrape_sources(source_keys=source_keys, keywords=keywords)
@@ -294,12 +300,14 @@ def send_matched_jobs_digest(
                 url=item.url,
                 description=item.description,
                 embedding=embedding,
+                embedding_vector=embedding,
                 scraped_at=item.scraped_at,
             )
             db.add(row)
             db.flush()
         else:
             row.embedding = embedding
+            row.embedding_vector = embedding
             row.description = item.description
             row.scraped_at = datetime.utcnow()
         saved_jobs.append(row)

@@ -187,3 +187,51 @@ def test_application_tracking_flow(monkeypatch):
     listing = client.get("/api/applications/")
     assert listing.status_code == 200
     assert len(listing.json()) == 1
+
+
+def test_reconciled_match_abstains_without_retrieval_evidence(monkeypatch):
+    client = _build_test_client()
+
+    monkeypatch.setattr(parser_module.ResumeParserService, "extract_text", lambda self, file_bytes, ext: "Skills\nPython\nExperience\n2 years")
+    monkeypatch.setattr(
+        parser_module.ResumeParserService,
+        "parse_resume",
+        lambda self, text: {
+            "skills": ["python"],
+            "experience_years_estimate": 2,
+            "projects_count_estimate": 1,
+            "sections": {"skills": ["Python"], "experience": ["2 years"], "projects": []},
+        },
+    )
+
+    upload = client.post(
+        "/api/resumes/upload",
+        files={
+            "file": (
+                "resume.docx",
+                io.BytesIO(_build_docx_bytes("Python backend experience")),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+    )
+    assert upload.status_code == 200
+    resume_id = upload.json()["resume_id"]
+
+    response = client.post(
+        "/api/resumes/match/reconciled",
+        json={
+            "resume_id": resume_id,
+            "jd_text": "Need Rust and embedded firmware engineer with hardware bring-up and C++ device drivers.",
+            "title": "Embedded Engineer",
+            "company": "ChipWorks",
+            "source": "manual",
+            "top_k": 5,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "no_match"
+    assert payload["abstained"] is True
+    assert payload["abstain_reason"] == "No strong match found"
+    assert payload["reconciliation_status"] == "no_match"

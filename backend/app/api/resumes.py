@@ -12,11 +12,24 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Up
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.api.schemas.resume import CleanupResponse, MatchRequest, MatchResponse, ResumeDetailResponse, ResumeUploadResponse, TailorRequest, TailorResponse, ResumeVersionItem, ResumeVersionsResponse
+from app.api.schemas.resume import (
+    CleanupResponse,
+    MatchRequest,
+    MatchResponse,
+    ReconciledMatchRequest,
+    ReconciledMatchResponse,
+    ResumeDetailResponse,
+    ResumeUploadResponse,
+    TailorRequest,
+    TailorResponse,
+    ResumeVersionItem,
+    ResumeVersionsResponse,
+)
 from app.database import get_db
 from app.models import JobDescription, MatchResult, Resume, ResumeVersion, User
 from app.services.matcher_service import ResumeMatcherService
 from app.services.parser_service import ResumeParserService
+from app.services.rag_service import ReconciledRAGService
 from app.services.retention_service import cleanup_expired_resumes
 from app.services.storage import get_storage_provider
 from app.services.tailor_service import ResumeTailorService
@@ -30,6 +43,7 @@ router = APIRouter()
 
 parser_service = ResumeParserService(spacy_model=settings.spacy_model)
 matcher_service = ResumeMatcherService(embedding_model_name=settings.embedding_model_name)
+rag_service = ReconciledRAGService(matcher_service=matcher_service)
 storage = get_storage_provider(settings.storage_root)
 tailor_service = ResumeTailorService()
 
@@ -70,12 +84,14 @@ def _create_tailored_version(
         matcher=matcher_service,
     )
     match_data = flow_output["match"]
+    jd_embedding = matcher_service.embed_text(request.jd_text)
 
     job = JobDescription(
         title=request.role,
         company=request.company,
         source=request.source,
         jd_text=request.jd_text,
+        embedding_vector=jd_embedding,
     )
     db.add(job)
     db.flush()
@@ -101,12 +117,14 @@ def _create_tailored_version(
         company=request.company,
         include_cover_letter=request.include_cover_letter,
     )
+    tailored_embedding = matcher_service.embed_text(tailored["tailored_resume_text"])
 
     new_version = ResumeVersion(
         resume_id=resume.id,
         version_no=latest_version.version_no + 1,
         content_text=tailored["tailored_resume_text"],
-        embedding=matcher_service.embed_text(tailored["tailored_resume_text"]),
+        embedding=tailored_embedding,
+        embedding_vector=tailored_embedding,
     )
     db.add(new_version)
     db.commit()
@@ -149,6 +167,7 @@ async def upload_resume(
     parsed_summary = parser_service.parse_resume(resume_text)
     stored_path = storage.save_file(content, filename)
     expiry = datetime.utcnow() + timedelta(days=settings.resume_retention_days)
+    resume_embedding = matcher_service.embed_text(resume_text)
 
     resume = Resume(
         user_id=current_user.id if current_user else None,
@@ -165,7 +184,8 @@ async def upload_resume(
         resume_id=resume.id,
         version_no=1,
         content_text=resume_text,
-        embedding=matcher_service.embed_text(resume_text),
+        embedding=resume_embedding,
+        embedding_vector=resume_embedding,
     )
     db.add(version)
     db.commit()
@@ -211,12 +231,14 @@ def match_resume(
         matcher=matcher_service,
     )
     match_data = flow_output["match"]
+    jd_embedding = matcher_service.embed_text(request.jd_text)
 
     job = JobDescription(
         title=request.title,
         company=request.company,
         source=request.source,
         jd_text=request.jd_text,
+        embedding_vector=jd_embedding,
     )
     db.add(job)
     db.flush()
@@ -241,6 +263,96 @@ def match_resume(
         total_score=match_result.total_score,
         missing_keywords=match_data["missing_keywords"],
         explanation=match_result.explanation,
+    )
+
+
+@router.post("/match/reconciled", response_model=ReconciledMatchResponse)
+def match_resume_reconciled(
+    request: ReconciledMatchRequest,
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional),
+):
+    resume = db.query(Resume).filter(Resume.id == request.resume_id).first()
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    if settings.auth_enabled and current_user and resume.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not allowed for this resume")
+
+    version = (
+        db.query(ResumeVersion)
+        .filter(ResumeVersion.resume_id == resume.id)
+        .order_by(ResumeVersion.version_no.desc())
+        .first()
+    )
+    if not version:
+        raise HTTPException(status_code=404, detail="Resume version not found")
+
+    rag_output = rag_service.run_reconciled_match(
+        db=db,
+        resume=resume,
+        resume_version=version,
+        jd_text=request.jd_text,
+        requested_title=request.title,
+        requested_company=request.company,
+        top_k=request.top_k,
+    )
+
+    jd_embedding = matcher_service.embed_text(request.jd_text)
+    job = JobDescription(
+        title=request.title,
+        company=request.company,
+        source=request.source,
+        jd_text=request.jd_text,
+        embedding_vector=jd_embedding,
+    )
+    db.add(job)
+    db.flush()
+
+    match_data = rag_output["match"]
+    match_result = MatchResult(
+        resume_id=resume.id,
+        job_description_id=job.id,
+        keyword_score=match_data["keyword_score"],
+        embedding_score=match_data["embedding_score"],
+        total_score=match_data["total_score"],
+        retrieval_score=rag_output["retrieval_score"],
+        retrieval_top_k=rag_output["retrieval_top_k"],
+        retrieved_context={"evidence": rag_output["evidence"]},
+        gaps={"missing_keywords": match_data["missing_keywords"]},
+        explanation={
+            **match_data["explanation"],
+            "engine": "reconciled-rag",
+            "status": rag_output["status"],
+            "skill_overlap": rag_output["skill_overlap"],
+            "skill_overlap_ratio": rag_output["skill_overlap_ratio"],
+            "resume_evidence_lines": rag_output["resume_evidence_lines"],
+        },
+        reconciliation_status=rag_output["status"],
+        reconciliation_confidence=rag_output["confidence"],
+        reconciliation_notes=rag_output.get("abstain_reason"),
+        abstained=rag_output["abstained"],
+        abstain_reason=rag_output.get("abstain_reason"),
+    )
+    db.add(match_result)
+    db.commit()
+    db.refresh(match_result)
+
+    return ReconciledMatchResponse(
+        match_id=match_result.id,
+        status=rag_output["status"],
+        keyword_score=match_result.keyword_score,
+        embedding_score=match_result.embedding_score,
+        total_score=match_result.total_score,
+        retrieval_score=match_result.retrieval_score,
+        retrieval_top_k=match_result.retrieval_top_k or request.top_k,
+        reconciliation_status=match_result.reconciliation_status,
+        reconciliation_confidence=match_result.reconciliation_confidence or 0.0,
+        abstained=match_result.abstained,
+        abstain_reason=match_result.abstain_reason,
+        answer=rag_output.get("answer"),
+        evidence=rag_output["evidence"],
+        explanation=match_result.explanation,
+        latency_ms=rag_output["latency_ms"],
     )
 
 

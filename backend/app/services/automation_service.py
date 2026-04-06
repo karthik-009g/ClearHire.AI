@@ -45,6 +45,7 @@ class AutomationService:
                     url=item.url,
                     description=item.description,
                     embedding=embedding,
+                    embedding_vector=embedding,
                     scraped_at=item.scraped_at,
                 )
                 db.add(row)
@@ -56,6 +57,7 @@ class AutomationService:
                 row.location = item.location
                 row.description = item.description
                 row.embedding = embedding
+                row.embedding_vector = embedding
                 row.scraped_at = datetime.utcnow()
             rows.append(row)
         return rows
@@ -137,6 +139,8 @@ class AutomationService:
 
         if not version.embedding:
             version.embedding = self.matcher.embed_text(version.content_text)
+        if not version.embedding_vector:
+            version.embedding_vector = version.embedding
 
         keywords = self._parse_csv(pref.keywords_csv if pref else None)
         sources = self._effective_sources(pref)

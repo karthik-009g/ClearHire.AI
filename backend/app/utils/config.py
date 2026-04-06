@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     # API Keys
     claude_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
+    groq_api_key: Optional[str] = None
+    llm_provider: str = "groq"
+    groq_model: str = "llama-3.3-70b-versatile"
     
     # Security
     secret_key: str = "your-secret-key-change-in-production"
@@ -39,6 +42,20 @@ class Settings(BaseSettings):
     )
     spacy_model: str = "en_core_web_sm"
     embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
+    embedding_dimensions: int = 384
+
+    # RAG and reconciliation
+    rag_top_k: int = 5
+    rag_similarity_threshold: float = 0.35
+    rag_abstain_threshold: float = 0.55
+    rag_reconcile_min_overlap: float = 0.5
+    rag_enable_pgvector: bool = True
+    rag_request_timeout_seconds: int = 20
+
+    # Evaluation defaults
+    evaluation_enabled: bool = True
+    evaluation_default_k: int = 5
+    evaluation_latency_target_ms_p95: int = 2500
     
     # Job Portal Credentials
     naukri_email: Optional[str] = None
