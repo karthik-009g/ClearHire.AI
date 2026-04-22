@@ -4,12 +4,17 @@ import streamlit as st
 
 from auth_guard import hide_dev_auth_nav, require_login
 from api_client import api_get, api_post
+from ui_theme import apply_page_theme, panel_end, panel_start
 
 hide_dev_auth_nav()
-st.title("Job Preferences")
-st.write("Configure email and keywords for matched jobs digest.")
-st.caption("Default scheduler is once daily at 09:00 Asia/Kolkata. You can change this manually.")
 require_login()
+apply_page_theme(
+    "Job Preferences",
+    "Set digest email, search keywords, preferred sources, and scheduler behavior for automated runs.",
+)
+
+panel_start()
+st.caption("Default scheduler is once daily at 09:00 Asia/Kolkata. You can change this manually.")
 
 preferred_email = st.text_input("Preferred Email")
 target_role = st.text_input("Target Role", value="Software Engineer")
@@ -65,3 +70,5 @@ if st.button("Load Preferences"):
         st.json(response.json())
     except Exception as exc:
         st.error(f"Could not load preferences: {exc}")
+
+panel_end()

@@ -4,11 +4,17 @@ import streamlit as st
 
 from auth_guard import hide_dev_auth_nav, require_login
 from api_client import api_get, api_post, api_post_raw
+from ui_theme import apply_page_theme, panel_end, panel_start
 
 hide_dev_auth_nav()
-st.title("Tailor Resume")
-st.info("Tailoring is copy-safe: source version is never overwritten. A new version is created.")
 require_login()
+apply_page_theme(
+    "Tailor Resume",
+    "Create a new tailored version from a selected source version. The original content is never overwritten.",
+)
+
+panel_start()
+st.info("Copy-safe behavior is enabled: every tailoring run creates a new version.")
 
 resume_id = st.text_input("Resume ID", value=st.session_state.get("resume_id", ""))
 
@@ -94,3 +100,5 @@ if st.button("Generate Apply-Ready ZIP"):
         st.success("Apply-ready package generated")
     except Exception as exc:
         st.error(f"Package generation failed: {exc}")
+
+panel_end()

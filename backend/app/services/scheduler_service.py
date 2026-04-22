@@ -102,6 +102,9 @@ def run_on_login(user_id: str) -> dict:
     db = SessionLocal()
     try:
         return automation.run_user_automation(db=db, user_id=user_id, trigger="login")
+    except Exception:
+        db.rollback()
+        return {"status": "skipped", "reason": "automation_error"}
     finally:
         db.close()
 
@@ -110,5 +113,8 @@ def run_on_upload(user_id: str) -> dict:
     db = SessionLocal()
     try:
         return automation.run_user_automation(db=db, user_id=user_id, trigger="upload")
+    except Exception:
+        db.rollback()
+        return {"status": "skipped", "reason": "automation_error"}
     finally:
         db.close()

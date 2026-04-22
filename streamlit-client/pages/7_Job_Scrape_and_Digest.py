@@ -4,11 +4,16 @@ import streamlit as st
 
 from auth_guard import hide_dev_auth_nav, require_login
 from api_client import api_post
+from ui_theme import apply_page_theme, panel_end, panel_start
 
 hide_dev_auth_nav()
-st.title("Scrape Jobs and Send Digest")
-st.write("Sources include India portals and company careers pages.")
 require_login()
+apply_page_theme(
+    "Scrape Jobs and Send Digest",
+    "Trigger multi-source scraping, review top embedding matches, and deliver ranked digest emails.",
+)
+
+panel_start()
 
 sources = st.multiselect(
     "Sources",
@@ -28,6 +33,15 @@ sources = st.multiselect(
 )
 keywords = st.text_input("Filter Keywords (comma separated)", value="python, backend, developer")
 resume_id_for_matching = st.text_input("Resume ID for embedding match", value=st.session_state.get("resume_id", ""))
+posted_within_hours = int(
+    st.number_input(
+        "Posted within last N hours",
+        min_value=1,
+        max_value=336,
+        value=48,
+        step=1,
+    )
+)
 send_email_after_scrape = st.checkbox("Send email after scrape", value=False)
 
 if st.button("Run Scrape"):
@@ -36,6 +50,7 @@ if st.button("Run Scrape"):
         "keywords": [x.strip() for x in keywords.split(",") if x.strip()],
         "resume_id": resume_id_for_matching or None,
         "send_email": send_email_after_scrape,
+        "posted_within_hours": posted_within_hours,
     }
     try:
         response = api_post("/api/jobs/scrape", payload=payload)
@@ -62,6 +77,7 @@ if st.button("Send Digest Email", type="primary"):
         "resume_id": resume_id,
         "preferred_email": email_override or None,
         "sources": sources,
+        "posted_within_hours": posted_within_hours,
     }
     try:
         response = api_post("/api/jobs/digest", payload=payload)
@@ -70,3 +86,5 @@ if st.button("Send Digest Email", type="primary"):
         st.json(response.json())
     except Exception as exc:
         st.error(f"Digest failed: {exc}")
+
+panel_end()

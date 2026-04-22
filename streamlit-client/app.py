@@ -145,7 +145,14 @@ st.markdown(
             radial-gradient(60vw 46vw at 18% 65%, rgba(32, 77, 150, 0.24), transparent 65%),
             radial-gradient(50vw 40vw at 76% 20%, rgba(19, 98, 205, 0.22), transparent 70%),
             var(--bg-space);
-        overflow: hidden;
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+
+    [data-testid="stMainBlockContainer"] {
+        max-width: min(1220px, 100%) !important;
+        padding-top: clamp(0.65rem, 1.8vh, 1.25rem) !important;
+        padding-bottom: clamp(1.8rem, 5vh, 4rem) !important;
     }
 
     [data-testid="stAppViewContainer"]::before {
@@ -220,6 +227,7 @@ st.markdown(
 
     [data-testid="stHeader"] {
         background: rgba(0, 0, 0, 0);
+        height: 0 !important;
     }
 
     [data-testid="stToolbar"] {

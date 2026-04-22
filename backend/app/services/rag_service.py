@@ -118,9 +118,13 @@ class ReconciledRAGService:
         scored: list[RetrievedEvidence] = []
         for row in rows:
             candidate_embedding = row.embedding_vector or row.embedding
-            if not candidate_embedding:
-                continue
-            if len(candidate_embedding) != len(query_embedding):
+            if not candidate_embedding or len(candidate_embedding) != len(query_embedding):
+                refreshed = self.matcher.embed_text(f"{row.title}\n{row.description or ''}")
+                row.embedding = refreshed
+                row.embedding_vector = refreshed
+                candidate_embedding = refreshed
+
+            if not candidate_embedding or len(candidate_embedding) != len(query_embedding):
                 continue
             similarity = self.matcher.cosine_similarity(query_embedding, candidate_embedding)
             normalized = max(0.0, min(1.0, (similarity + 1.0) / 2.0))
@@ -180,9 +184,12 @@ class ReconciledRAGService:
         scored: list[RetrievedEvidence] = []
         for row in rows:
             candidate_embedding = row.embedding_vector
-            if not candidate_embedding:
-                continue
-            if len(candidate_embedding) != len(query_embedding):
+            if not candidate_embedding or len(candidate_embedding) != len(query_embedding):
+                refreshed = self.matcher.embed_text(row.jd_text)
+                row.embedding_vector = refreshed
+                candidate_embedding = refreshed
+
+            if not candidate_embedding or len(candidate_embedding) != len(query_embedding):
                 continue
             similarity = self.matcher.cosine_similarity(query_embedding, candidate_embedding)
             normalized = max(0.0, min(1.0, (similarity + 1.0) / 2.0))

@@ -189,6 +189,41 @@ def test_application_tracking_flow(monkeypatch):
     assert len(listing.json()) == 1
 
 
+def test_resume_reembed_endpoint(monkeypatch):
+    client = _build_test_client()
+
+    monkeypatch.setattr(parser_module.ResumeParserService, "extract_text", lambda self, file_bytes, ext: "Skills\nPython\nExperience\n2 years")
+    monkeypatch.setattr(
+        parser_module.ResumeParserService,
+        "parse_resume",
+        lambda self, text: {
+            "skills": ["python", "fastapi"],
+            "experience_years_estimate": 2,
+            "projects_count_estimate": 1,
+            "sections": {"skills": ["Python", "FastAPI"], "experience": ["2 years"], "projects": []},
+        },
+    )
+
+    upload = client.post(
+        "/api/resumes/upload",
+        files={
+            "file": (
+                "resume.docx",
+                io.BytesIO(_build_docx_bytes("Python backend experience")),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+    )
+    assert upload.status_code == 200
+    resume_id = upload.json()["resume_id"]
+
+    reembed = client.post(f"/api/resumes/{resume_id}/reembed")
+    assert reembed.status_code == 200
+    payload = reembed.json()
+    assert payload["resume_id"] == resume_id
+    assert payload["versions_updated"] == 1
+
+
 def test_reconciled_match_abstains_without_retrieval_evidence(monkeypatch):
     client = _build_test_client()
 

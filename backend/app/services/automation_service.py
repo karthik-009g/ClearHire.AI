@@ -16,8 +16,15 @@ from app.utils.config import settings
 class AutomationService:
     def __init__(self) -> None:
         self.scraper = JobScraperService()
-        self.matcher = ResumeMatcherService(embedding_model_name=settings.embedding_model_name)
+        self.matcher = ResumeMatcherService(
+            embedding_model_name=settings.embedding_model_name,
+            embedding_dimensions=settings.embedding_dimensions,
+        )
         self.emailer = EmailService()
+
+    @staticmethod
+    def _embedding_invalid(vector: list[float] | None) -> bool:
+        return vector is None or len(vector) != settings.embedding_dimensions
 
     @staticmethod
     def _parse_csv(csv_value: str | None) -> list[str]:
@@ -72,15 +79,34 @@ class AutomationService:
         for job in jobs:
             title = (job.title or "").lower()
             description = (job.description or "").lower()
-            keyword_hits = sum(1 for kw in keywords if kw.lower() in title or kw.lower() in description)
-            keyword_score = min(100.0, float(keyword_hits * 20)) if keywords else 0.0
+            weighted_hits = 0.0
+            for kw in keywords:
+                kw_l = kw.lower().strip()
+                if not kw_l:
+                    continue
+                if kw_l in title:
+                    weighted_hits += 2.0
+                elif kw_l in description:
+                    weighted_hits += 1.0
+            keyword_score = min(100.0, weighted_hits * 18.0) if keywords else 0.0
 
             semantic_score = 0.0
             if resume_embedding and job.embedding and len(resume_embedding) == len(job.embedding):
                 similarity = self.matcher.cosine_similarity(resume_embedding, job.embedding)
                 semantic_score = max(0.0, ((similarity + 1.0) / 2.0) * 100.0)
 
-            job.score = round((0.65 * semantic_score) + (0.35 * keyword_score), 2)
+            recency_score = 50.0
+            if job.scraped_at:
+                hours_old = max(0.0, (datetime.utcnow() - job.scraped_at).total_seconds() / 3600.0)
+                recency_score = max(10.0, 100.0 - (hours_old * 2.5))
+                if hours_old <= 24:
+                    recency_score = min(100.0, recency_score + 8.0)
+
+            # If there are no user keywords, avoid over-penalizing role-compatible results.
+            if not keywords and any(token in title for token in ("engineer", "developer", "analyst", "intern", "sde")):
+                keyword_score = max(keyword_score, 35.0)
+
+            job.score = round((0.58 * semantic_score) + (0.30 * keyword_score) + (0.12 * recency_score), 2)
             ranked.append(job)
 
         return sorted(ranked, key=lambda row: (row.score or 0.0), reverse=True)
@@ -137,28 +163,45 @@ class AutomationService:
         if not version:
             return {"status": "skipped", "reason": "no_resume_version"}
 
-        if not version.embedding:
-            version.embedding = self.matcher.embed_text(version.content_text)
-        if not version.embedding_vector:
+        if self._embedding_invalid(version.embedding):
+            resume_context = self.matcher.build_resume_context(
+                version.content_text,
+                parsed_summary=resume.parsed_summary,
+            )
+            version.embedding = self.matcher.embed_text(resume_context)
+        if self._embedding_invalid(version.embedding_vector):
             version.embedding_vector = version.embedding
 
         keywords = self._parse_csv(pref.keywords_csv if pref else None)
         sources = self._effective_sources(pref)
-        scraped_jobs = self.scraper.scrape_sources(source_keys=sources, keywords=keywords)
+        posted_within_hours = (
+            settings.default_scrape_posted_within_hours
+            if settings.default_scrape_posted_within_hours > 0
+            else None
+        )
+        scraped_jobs = self.scraper.scrape_sources(
+            source_keys=sources,
+            keywords=keywords,
+            max_post_age_hours=posted_within_hours,
+        )
         stored_jobs = self._upsert_jobs(db, scraped_jobs)
         ranked_jobs = self._rank_jobs(stored_jobs, version.embedding, keywords)
 
         sent_to = None
+        email_error = None
         recipient = (pref.preferred_email if pref and pref.preferred_email else user.email).strip()
-        should_send_mail = bool(pref.auto_email_after_scrape) if pref else True
+        should_send_mail = settings.automation_email_enabled and (bool(pref.auto_email_after_scrape) if pref else True)
         if should_send_mail and self.emailer.is_configured() and recipient:
             html = self._render_digest_html(ranked_jobs)
-            self.emailer.send_html_email(
-                to_email=recipient,
-                subject="Top matched jobs for your resume",
-                html_body=html,
-            )
-            sent_to = recipient
+            try:
+                self.emailer.send_html_email(
+                    to_email=recipient,
+                    subject="Top matched jobs for your resume",
+                    html_body=html,
+                )
+                sent_to = recipient
+            except Exception as exc:  # pragma: no cover - SMTP/network provider variance
+                email_error = str(exc)
 
         db.commit()
 
@@ -176,6 +219,7 @@ class AutomationService:
                 for row in ranked_jobs[:10]
             ],
             "sent_to": sent_to,
+            "email_error": email_error,
         }
 
     @staticmethod

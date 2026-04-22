@@ -31,13 +31,26 @@ router = APIRouter()
 scraper = JobScraperService()
 emailer = EmailService()
 automation = AutomationService()
-matcher = ResumeMatcherService(embedding_model_name=settings.embedding_model_name)
+matcher = ResumeMatcherService(
+    embedding_model_name=settings.embedding_model_name,
+    embedding_dimensions=settings.embedding_dimensions,
+)
+
+
+def _embedding_invalid(vector: list[float] | None) -> bool:
+    return vector is None or len(vector) != settings.embedding_dimensions
 
 
 def _effective_sources(sources: list[str]) -> list[str]:
     if sources:
         return [s for s in sources if s in SOURCES]
     return list(SOURCES.keys())
+
+
+def _effective_posted_within_hours(requested: int | None) -> int | None:
+    if requested is not None:
+        return requested
+    return settings.default_scrape_posted_within_hours if settings.default_scrape_posted_within_hours > 0 else None
 
 
 def _parse_csv(csv_value: str | None) -> list[str]:
@@ -97,6 +110,29 @@ def _to_preferences_response(pref: UserPreference) -> PreferencesResponse:
     )
 
 
+def _default_preferences_response(current_user: User | None) -> PreferencesResponse:
+    preferred_email = ""
+    if current_user and getattr(current_user, "email", None):
+        preferred_email = current_user.email
+
+    default_sources = [source for source in ["naukri", "linkedin"] if source in SOURCES]
+    if not default_sources:
+        default_sources = _effective_sources([])
+
+    return PreferencesResponse(
+        preferred_email=preferred_email,
+        target_role="Software Engineer",
+        locations=[],
+        keywords=[],
+        selected_sources=default_sources,
+        auto_schedule_enabled=False,
+        schedule_time="09:00",
+        schedule_timezone=settings.default_schedule_timezone,
+        auto_scrape_on_login=True,
+        auto_email_after_scrape=False,
+    )
+
+
 @router.post("/scrape", response_model=ScrapeJobsResponse)
 def scrape_jobs(
     request: ScrapeJobsRequest,
@@ -104,7 +140,12 @@ def scrape_jobs(
     current_user: User | None = Depends(get_current_user_optional),
 ):
     source_keys = _effective_sources(request.sources)
-    jobs = scraper.scrape_sources(source_keys=source_keys, keywords=request.keywords)
+    posted_within_hours = _effective_posted_within_hours(request.posted_within_hours)
+    jobs = scraper.scrape_sources(
+        source_keys=source_keys,
+        keywords=request.keywords,
+        max_post_age_hours=posted_within_hours,
+    )
 
     pref_query = db.query(UserPreference)
     pref_query = _owner_filter(pref_query, UserPreference.user_id, current_user)
@@ -113,9 +154,13 @@ def scrape_jobs(
     resume, resume_version = _resolve_resume_with_owner_check(db, request.resume_id, current_user)
     resume_embedding = None
     if resume_version:
-        if not resume_version.embedding:
-            resume_version.embedding = matcher.embed_text(resume_version.content_text)
-        if not resume_version.embedding_vector:
+        if _embedding_invalid(resume_version.embedding):
+            resume_context = matcher.build_resume_context(
+                resume_version.content_text,
+                parsed_summary=resume.parsed_summary if resume else None,
+            )
+            resume_version.embedding = matcher.embed_text(resume_context)
+        if _embedding_invalid(resume_version.embedding_vector):
             resume_version.embedding_vector = resume_version.embedding
         resume_embedding = resume_version.embedding
 
@@ -164,12 +209,7 @@ def scrape_jobs(
 
     db.commit()
 
-    latest = (
-        db.query(JobPosting)
-        .order_by(JobPosting.scraped_at.desc())
-        .limit(max(len(persisted), 1))
-        .all()
-    )
+    latest = sorted(persisted, key=lambda row: row.scraped_at or datetime.min, reverse=True)
 
     return ScrapeJobsResponse(
         scraped_count=len(persisted),
@@ -245,7 +285,7 @@ def get_preferences(
     query = _owner_filter(query, UserPreference.user_id, current_user)
     pref = query.first()
     if not pref:
-        raise HTTPException(status_code=404, detail="Preferences not set")
+        return _default_preferences_response(current_user)
 
     return _to_preferences_response(pref)
 
@@ -279,13 +319,22 @@ def send_matched_jobs_digest(
     if pref and pref.keywords_csv:
         keywords = [k.strip() for k in pref.keywords_csv.split(",") if k.strip()]
 
-    if not latest_version.embedding:
-        latest_version.embedding = matcher.embed_text(latest_version.content_text)
-    if not latest_version.embedding_vector:
+    if _embedding_invalid(latest_version.embedding):
+        resume_context = matcher.build_resume_context(
+            latest_version.content_text,
+            parsed_summary=resume.parsed_summary,
+        )
+        latest_version.embedding = matcher.embed_text(resume_context)
+    if _embedding_invalid(latest_version.embedding_vector):
         latest_version.embedding_vector = latest_version.embedding
 
     source_keys = _effective_sources(request.sources)
-    scraped = scraper.scrape_sources(source_keys=source_keys, keywords=keywords)
+    posted_within_hours = _effective_posted_within_hours(request.posted_within_hours)
+    scraped = scraper.scrape_sources(
+        source_keys=source_keys,
+        keywords=keywords,
+        max_post_age_hours=posted_within_hours,
+    )
 
     saved_jobs: list[JobPosting] = []
     for item in scraped:
@@ -306,6 +355,10 @@ def send_matched_jobs_digest(
             db.add(row)
             db.flush()
         else:
+            row.source = item.source
+            row.company = item.company
+            row.title = item.title
+            row.location = item.location
             row.embedding = embedding
             row.embedding_vector = embedding
             row.description = item.description

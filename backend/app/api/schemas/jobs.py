@@ -10,6 +10,7 @@ class ScrapeJobsRequest(BaseModel):
     keywords: list[str] = Field(default_factory=list)
     resume_id: str | None = None
     send_email: bool = False
+    posted_within_hours: int | None = Field(default=None, ge=1, le=336)
 
 
 class JobItem(BaseModel):
@@ -59,6 +60,7 @@ class DigestRequest(BaseModel):
     resume_id: str
     preferred_email: EmailStr | None = None
     sources: list[str] = Field(default_factory=list)
+    posted_within_hours: int | None = Field(default=None, ge=1, le=336)
 
 
 class DigestResponse(BaseModel):

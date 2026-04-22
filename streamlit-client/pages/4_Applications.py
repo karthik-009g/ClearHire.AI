@@ -4,11 +4,17 @@ import streamlit as st
 
 from auth_guard import hide_dev_auth_nav, require_login
 from api_client import api_get, api_patch, api_post
+from ui_theme import apply_page_theme, panel_end, panel_start
 
 hide_dev_auth_nav()
-st.title("Applications")
 require_login()
-st.info("Autofill is currently on hold. Current V1 flow focuses on scrape + top-match email.")
+apply_page_theme(
+    "Applications",
+    "Track application records and statuses. Autofill remains intentionally on hold in V1.",
+)
+
+panel_start()
+st.info("Autofill is currently on hold. Current V1 flow focuses on scrape plus top-match email.")
 
 st.subheader("Create Application Record")
 job_description_id = st.number_input("Job Description ID", min_value=1, value=1, step=1)
@@ -57,3 +63,5 @@ if st.button("Refresh List"):
         st.json(data)
     except Exception as exc:
         st.error(f"List failed: {exc}")
+
+panel_end()

@@ -25,3 +25,17 @@ export async function tailorResume(payload) {
     body: JSON.stringify(payload),
   });
 }
+
+export async function listResumeVersions(resumeId) {
+  return request(`/api/resumes/${resumeId}/versions`);
+}
+
+export async function getResumeDetail(resumeId) {
+  return request(`/api/resumes/${resumeId}`);
+}
+
+export async function reembedResume(resumeId) {
+  return request(`/api/resumes/${resumeId}/reembed`, {
+    method: "POST",
+  });
+}

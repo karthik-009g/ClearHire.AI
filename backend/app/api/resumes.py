@@ -42,10 +42,17 @@ from app.utils.file_security import FileValidationError, validate_resume_upload
 router = APIRouter()
 
 parser_service = ResumeParserService(spacy_model=settings.spacy_model)
-matcher_service = ResumeMatcherService(embedding_model_name=settings.embedding_model_name)
+matcher_service = ResumeMatcherService(
+    embedding_model_name=settings.embedding_model_name,
+    embedding_dimensions=settings.embedding_dimensions,
+)
 rag_service = ReconciledRAGService(matcher_service=matcher_service)
 storage = get_storage_provider(settings.storage_root)
 tailor_service = ResumeTailorService()
+
+
+def _embedding_needs_refresh(vector: list[float] | None) -> bool:
+    return vector is None or len(vector) != settings.embedding_dimensions
 
 
 def _create_tailored_version(
@@ -117,12 +124,22 @@ def _create_tailored_version(
         company=request.company,
         include_cover_letter=request.include_cover_letter,
     )
-    tailored_embedding = matcher_service.embed_text(tailored["tailored_resume_text"])
+    tailored_text = tailored["tailored_resume_text"]
+    try:
+        tailored_summary = parser_service.parse_resume(tailored_text)
+    except Exception:
+        tailored_summary = None
+
+    tailored_context = matcher_service.build_resume_context(
+        tailored_text,
+        parsed_summary=tailored_summary,
+    )
+    tailored_embedding = matcher_service.embed_text(tailored_context)
 
     new_version = ResumeVersion(
         resume_id=resume.id,
         version_no=latest_version.version_no + 1,
-        content_text=tailored["tailored_resume_text"],
+        content_text=tailored_text,
         embedding=tailored_embedding,
         embedding_vector=tailored_embedding,
     )
@@ -167,7 +184,8 @@ async def upload_resume(
     parsed_summary = parser_service.parse_resume(resume_text)
     stored_path = storage.save_file(content, filename)
     expiry = datetime.utcnow() + timedelta(days=settings.resume_retention_days)
-    resume_embedding = matcher_service.embed_text(resume_text)
+    resume_context = matcher_service.build_resume_context(resume_text, parsed_summary=parsed_summary)
+    resume_embedding = matcher_service.embed_text(resume_context)
 
     resume = Resume(
         user_id=current_user.id if current_user else None,
@@ -223,6 +241,16 @@ def match_resume(
     )
     if not version:
         raise HTTPException(status_code=404, detail="Resume version not found")
+
+    if _embedding_needs_refresh(version.embedding):
+        parsed_summary = parser_service.parse_resume(version.content_text)
+        context_text = matcher_service.build_resume_context(
+            version.content_text,
+            parsed_summary=parsed_summary,
+        )
+        refreshed_embedding = matcher_service.embed_text(context_text)
+        version.embedding = refreshed_embedding
+        version.embedding_vector = refreshed_embedding
 
     flow_output = run_resume_analysis_flow(
         resume_text=version.content_text,
@@ -286,6 +314,16 @@ def match_resume_reconciled(
     )
     if not version:
         raise HTTPException(status_code=404, detail="Resume version not found")
+
+    if _embedding_needs_refresh(version.embedding):
+        parsed_summary = parser_service.parse_resume(version.content_text)
+        context_text = matcher_service.build_resume_context(
+            version.content_text,
+            parsed_summary=parsed_summary,
+        )
+        refreshed_embedding = matcher_service.embed_text(context_text)
+        version.embedding = refreshed_embedding
+        version.embedding_vector = refreshed_embedding
 
     rag_output = rag_service.run_reconciled_match(
         db=db,
@@ -408,6 +446,53 @@ def list_resume_versions(
         resume_id=resume.id,
         versions=[ResumeVersionItem(id=v.id, version_no=v.version_no, created_at=v.created_at) for v in versions],
     )
+
+
+@router.post("/{resume_id}/reembed")
+def reembed_resume_versions(
+    resume_id: str,
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional),
+):
+    resume = db.query(Resume).filter(Resume.id == resume_id).first()
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    if settings.auth_enabled and current_user and resume.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not allowed for this resume")
+
+    versions = (
+        db.query(ResumeVersion)
+        .filter(ResumeVersion.resume_id == resume.id)
+        .order_by(ResumeVersion.version_no.asc())
+        .all()
+    )
+    if not versions:
+        raise HTTPException(status_code=404, detail="Resume version not found")
+
+    updated = 0
+    latest_summary: dict | None = None
+    for version in versions:
+        parsed_summary = parser_service.parse_resume(version.content_text)
+        latest_summary = parsed_summary
+        context_text = matcher_service.build_resume_context(
+            version.content_text,
+            parsed_summary=parsed_summary,
+        )
+        refreshed_embedding = matcher_service.embed_text(context_text)
+        version.embedding = refreshed_embedding
+        version.embedding_vector = refreshed_embedding
+        updated += 1
+
+    if latest_summary is not None:
+        resume.parsed_summary = latest_summary
+
+    db.commit()
+    return {
+        "resume_id": resume.id,
+        "versions_updated": updated,
+        "embedding_dimensions": settings.embedding_dimensions,
+        "parsed_summary": resume.parsed_summary,
+    }
 
 
 @router.post("/cleanup-expired", response_model=CleanupResponse)

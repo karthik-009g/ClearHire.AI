@@ -1,109 +1,74 @@
-import { useMemo, useState } from "react";
-import { uploadResume, matchResume, tailorResume } from "../api/resumes";
-import { API_BASE } from "../api/client";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import ModuleLayout from "../components/ModuleLayout";
+import { formatPercent, getJdContext, getResmatContext } from "../lib/moduleState";
+
+const MODULES = [
+  {
+    href: "/resmat-ai",
+    title: "ResMat.ai",
+    summary: "Resume analyzer with parsing, skills extraction, and skill gap sub-module.",
+  },
+  {
+    href: "/jd-analyzer",
+    title: "JD Analyzer",
+    summary: "JD + company analysis with resume scoring and generated target tech stack.",
+  },
+  {
+    href: "/job-hunter",
+    title: "Job Hunter",
+    summary: "Auto-search jobs, match with resume context, and return ranked opportunities.",
+  },
+  {
+    href: "/student-lab",
+    title: "Student Lab",
+    summary: "AI engineer growth modules: sprints, projects, and interview drills.",
+  },
+];
 
 export default function HomePage() {
-  const [file, setFile] = useState(null);
-  const [resumeId, setResumeId] = useState("");
-  const [jdText, setJdText] = useState("");
-  const [role, setRole] = useState("Backend Engineer");
-  const [company, setCompany] = useState("Acme");
-  const [includeCoverLetter, setIncludeCoverLetter] = useState(true);
-  const [result, setResult] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [resumeContext, setResumeContext] = useState(null);
+  const [jdContext, setJdContextState] = useState(null);
 
-  const canRunMatch = useMemo(() => resumeId && jdText.trim().length >= 20, [resumeId, jdText]);
-
-  const onUpload = async () => {
-    if (!file) return;
-    setError("");
-    setLoading(true);
-    try {
-      const data = await uploadResume(file);
-      setResumeId(data.resume_id);
-      setResult({ upload: data });
-    } catch (err) {
-      setError(err.message || "Upload failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const onMatch = async () => {
-    if (!canRunMatch) return;
-    setError("");
-    setLoading(true);
-    try {
-      const data = await matchResume({ resume_id: resumeId, jd_text: jdText, title: role, company, source: "frontend" });
-      setResult((prev) => ({ ...(prev || {}), match: data }));
-    } catch (err) {
-      setError(err.message || "Match failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const onTailor = async () => {
-    if (!canRunMatch) return;
-    setError("");
-    setLoading(true);
-    try {
-      const data = await tailorResume({
-        resume_id: resumeId,
-        jd_text: jdText,
-        role,
-        company,
-        source: "frontend",
-        candidate_name: "Candidate",
-        include_cover_letter: includeCoverLetter,
-      });
-      setResult((prev) => ({ ...(prev || {}), tailor: data }));
-    } catch (err) {
-      setError(err.message || "Tailor failed");
-    } finally {
-      setLoading(false);
-    }
-  };
+  useEffect(() => {
+    setResumeContext(getResmatContext());
+    setJdContextState(getJdContext());
+  }, []);
 
   return (
-    <main className="page">
-      <section className="hero">
-        <p className="eyebrow">Agentic Job Application Assistant</p>
-        <h1>Resume Match and Tailor</h1>
-        <p className="sub">Backend API: {API_BASE}</p>
-      </section>
+    <ModuleLayout
+      title="Mission Control"
+      subtitle="Multi-page architecture is active. Open each module in its own route and run the pipeline end-to-end."
+    >
+      <div className="mp-grid three">
+        <article className="mp-card">
+          <h3>Resume Ready</h3>
+          <p className="mp-metric">{resumeContext?.resumeId ? "Yes" : "No"}</p>
+          <p>Resume ID: {resumeContext?.resumeId || "Not set"}</p>
+        </article>
+        <article className="mp-card">
+          <h3>Latest Match</h3>
+          <p className="mp-metric">{formatPercent(jdContext?.match?.total_score)}</p>
+          <p>Company: {jdContext?.companyName || "Not analyzed"}</p>
+        </article>
+        <article className="mp-card">
+          <h3>Skill Gaps</h3>
+          <p className="mp-metric">{jdContext?.skillGap?.length || 0}</p>
+          <p>Computed in JD Analyzer route.</p>
+        </article>
+      </div>
 
-      <section className="card">
-        <h2>1) Upload Resume</h2>
-        <input type="file" accept=".pdf,.docx" onChange={(e) => setFile(e.target.files?.[0] || null)} />
-        <button onClick={onUpload} disabled={!file || loading}>{loading ? "Working..." : "Upload Resume"}</button>
-        {resumeId && <p className="ok">Resume ID: {resumeId}</p>}
-      </section>
-
-      <section className="card">
-        <h2>2) Job Description</h2>
-        <div className="grid">
-          <input value={role} onChange={(e) => setRole(e.target.value)} placeholder="Role" />
-          <input value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Company" />
-        </div>
-        <textarea value={jdText} onChange={(e) => setJdText(e.target.value)} rows={8} placeholder="Paste job description (min 20 chars)" />
-        <label className="check">
-          <input type="checkbox" checked={includeCoverLetter} onChange={(e) => setIncludeCoverLetter(e.target.checked)} />
-          Include cover letter in apply-ready package
-        </label>
-        <div className="actions">
-          <button onClick={onMatch} disabled={!canRunMatch || loading}>Run Match</button>
-          <button onClick={onTailor} disabled={!canRunMatch || loading}>Tailor Resume</button>
-        </div>
-      </section>
-
-      {error && <p className="error">{error}</p>}
-
-      <section className="card">
-        <h2>3) Results</h2>
-        <pre>{JSON.stringify(result, null, 2)}</pre>
-      </section>
-    </main>
+      <div className="mp-grid two">
+        {MODULES.map((module) => (
+          <article key={module.href} className="mp-card module">
+            <h3>{module.title}</h3>
+            <p>{module.summary}</p>
+            <Link className="mp-link" href={module.href}>
+              Open {module.title}
+            </Link>
+          </article>
+        ))}
+      </div>
+    </ModuleLayout>
   );
 }

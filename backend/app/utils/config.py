@@ -64,10 +64,12 @@ class Settings(BaseSettings):
     linkedin_password: Optional[str] = None
     
     # Scraping
-    request_timeout: int = 30
+    request_timeout: int = 30 
     max_retries: int = 3
     retry_delay: int = 5
-    scrape_max_jobs_per_source: int = 25
+    scrape_max_jobs_per_source: int = 50
+    scrape_max_pages_per_source: int = 5
+    default_scrape_posted_within_hours: int = 48
     default_schedule_timezone: str = "Asia/Kolkata"
 
     # Email delivery
@@ -77,6 +79,7 @@ class Settings(BaseSettings):
     smtp_password: Optional[str] = None
     smtp_sender_email: Optional[str] = None
     smtp_use_tls: bool = True
+    automation_email_enabled: bool = False
     
     # Rate limiting
     rate_limit_jobs_per_minute: int = 60

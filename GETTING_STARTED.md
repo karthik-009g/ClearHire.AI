@@ -2,6 +2,39 @@
 
 ## 🎯 Quick Start Guide
 
+### One-Command App Launch (Windows)
+
+From `job-automation-tool` you can start backend + frontend together:
+
+```powershell
+.\start_app.ps1
+```
+
+Useful options:
+
+```powershell
+# Start backend + Next.js frontend instead of Streamlit
+.\start_app.ps1 -Frontend next
+
+# Also start Postgres and Redis containers first
+.\start_app.ps1 -StartInfra
+
+# Skip dependency install if already prepared
+.\start_app.ps1 -SkipInstall
+
+# Force-restart services using ports 8000/8501/3000
+.\start_app.ps1 -ForceRestart
+
+# Use separate venv per service (slower first run, stricter isolation)
+.\start_app.ps1 -UseIsolatedVenv
+```
+
+Stop everything started by the launcher:
+
+```powershell
+.\stop_app.ps1
+```
+
 Your project is now organized into **4 main segments**. Here's how to get started:
 
 ### 📂 Project Structure Overview

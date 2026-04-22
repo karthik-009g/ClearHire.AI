@@ -32,14 +32,20 @@ def run_resume_analysis_flow(resume_text: str, jd_text: str, parser: ResumeParse
 
     if StateGraph is None:
         parsed = parser.parse_resume(resume_text)
-        match = matcher.match(resume_text, jd_text)
+        match = matcher.match(resume_text, jd_text, parsed_summary=parsed)
         return {"parsed": parsed, "match": match, "engine": "service-pipeline"}
 
     def parse_node(state: ResumeAnalysisState) -> ResumeAnalysisState:
         return {"parsed": parser.parse_resume(state["resume_text"]) }
 
     def match_node(state: ResumeAnalysisState) -> ResumeAnalysisState:
-        return {"match": matcher.match(state["resume_text"], state["jd_text"]) }
+        return {
+            "match": matcher.match(
+                state["resume_text"],
+                state["jd_text"],
+                parsed_summary=state.get("parsed"),
+            )
+        }
 
     graph = StateGraph(ResumeAnalysisState)
     graph.add_node("parse_step", parse_node)

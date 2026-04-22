@@ -24,7 +24,10 @@ def _valid_dimension(vector: list[float] | None, expected_dimension: int) -> boo
 
 def run_backfill() -> BackfillSummary:
     db = SessionLocal()
-    matcher = ResumeMatcherService(embedding_model_name=settings.embedding_model_name)
+    matcher = ResumeMatcherService(
+        embedding_model_name=settings.embedding_model_name,
+        embedding_dimensions=settings.embedding_dimensions,
+    )
     runtime_dimension = len(matcher.embed_text("dimension-probe"))
     summary = BackfillSummary()
 
@@ -32,7 +35,9 @@ def run_backfill() -> BackfillSummary:
     for row in resume_versions:
         vector = row.embedding
         if not _valid_dimension(vector, runtime_dimension):
-            vector = matcher.embed_text(row.content_text)
+            parsed_summary = row.resume.parsed_summary if getattr(row, "resume", None) is not None else None
+            context_text = matcher.build_resume_context(row.content_text, parsed_summary=parsed_summary)
+            vector = matcher.embed_text(context_text)
             row.embedding = vector
 
         if _valid_dimension(vector, runtime_dimension):
