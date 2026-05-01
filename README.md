@@ -14,7 +14,7 @@
 ---
 
 ## 📌 What Is This Project?
-
+  
 **ClearHire.ai** is a modular **AI Career Engine** that automates and optimizes the job search workflow using intelligent pipelines.
 
 Instead of manually:
