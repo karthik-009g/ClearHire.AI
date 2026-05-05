@@ -7,7 +7,7 @@
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat\&logo=python\&logoColor=white)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?style=flat\&logo=fastapi\&logoColor=white)](https://fastapi.tiangolo.com)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14+-336791?style=flat\&logo=postgresql\&logoColor=white)](https://postgresql.org)
-[![Streamlit](https://img.shields.io/badge/Streamlit-Frontend-FF4B4B?style=flat\&logo=streamlit\&logoColor=white)](https://streamlit.io)
+[![Next.js](https://img.shields.io/badge/Next.js-Frontend-000000?style=flat\&logo=nextdotjs\&logoColor=white)](https://nextjs.org)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat\&logo=docker\&logoColor=white)](https://docker.com)
 [![Status](https://img.shields.io/badge/Status-Active%20Development-brightgreen?style=flat)]()
 
@@ -142,7 +142,7 @@ Match Score = weighted(keyword_score, embedding_score)
 
 ### Frontend
 
-* Streamlit (multi-page modular UI)
+* Next.js (React) web dashboard
 
 ### DevOps
 
@@ -175,7 +175,6 @@ These scripts automate backend + frontend startup.
 clearhire-ai/
 ├── backend/
 ├── frontend/
-├── streamlit-client/
 ├── resume_analyzer/
 ├── docs/
 ├── deployment/
@@ -206,7 +205,7 @@ clearhire-ai/
 
 * Auto-apply not implemented yet
 * Limited job source integrations
-* Streamlit UI (not production-scaled yet)
+* UI is under active development
 
 ---
 

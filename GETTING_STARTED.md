@@ -10,10 +10,12 @@ From `job-automation-tool` you can start backend + frontend together:
 .\start_app.ps1
 ```
 
+By default, this now starts the updated Next.js frontend in `frontend/`.
+
 Useful options:
 
 ```powershell
-# Start backend + Next.js frontend instead of Streamlit
+# Start backend + Next.js frontend (explicit)
 .\start_app.ps1 -Frontend next
 
 # Also start Postgres and Redis containers first
@@ -22,7 +24,10 @@ Useful options:
 # Skip dependency install if already prepared
 .\start_app.ps1 -SkipInstall
 
-# Force-restart services using ports 8000/8501/3000
+# Fast start (skips installs, migrations, and health waits)
+.\start_app.ps1 -Fast
+
+# Force-restart services using ports 8000/3000
 .\start_app.ps1 -ForceRestart
 
 # Use separate venv per service (slower first run, stricter isolation)

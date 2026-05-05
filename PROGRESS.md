@@ -8,7 +8,7 @@
 - AI strategy locked to: explainable heuristic scoring + embeddings (LLM rewriting postponed to V2).
 - Data policy locked to: Postgres + 30-day retention + resume version history.
 - Security baseline locked to: HTTPS, upload validation, max 10MB, avoid raw resume text in logs.
-- Frontend direction updated: Streamlit multipage client for V1 (Next.js deferred).
+- Frontend direction updated: Next.js frontend for V1.
 
 ## 📊 Project Segments Status
 
@@ -218,11 +218,6 @@
 
 ---
 
-## Streamlit Client (V1 Active Frontend)
+## Next.js Frontend (V1 Active Frontend)
 
-- [x] Multipage Streamlit client scaffold
-- [x] Upload page integrated with backend
-- [x] Match page integrated with backend
-- [x] Copy-safe tailor page integrated with backend
-- [x] Applications page integrated with backend
-- [x] Optional auth page for `AUTH_ENABLED=true`
+- [ ] Implement Next.js UI flows (see `frontend/`)

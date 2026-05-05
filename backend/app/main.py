@@ -44,12 +44,12 @@ tags_metadata = [
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup logic
-    print("🚀 Starting Job Automation Tool...")
+    print("[startup] Starting Job Automation Tool...")
     start_scheduler()
     yield
     # Shutdown logic
     stop_scheduler()
-    print("✓ Shutting down gracefully...")
+    print("[shutdown] Shutting down gracefully...")
 
 # Initialize FastAPI app
 app = FastAPI(

@@ -1,6 +1,7 @@
 param(
-    [ValidateSet("streamlit", "next")]
-    [string]$Frontend = "streamlit",
+    [ValidateSet("next")]
+    [string]$Frontend = "next",
+    [switch]$Fast,
     [switch]$SkipInstall,
     [switch]$SkipMigrate,
     [switch]$StartInfra,
@@ -11,12 +12,27 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+$waitForServices = $true
+if ($Fast) {
+    $waitForServices = $false
+    if (-not $PSBoundParameters.ContainsKey("SkipInstall")) {
+        $SkipInstall = $true
+    }
+    if (-not $PSBoundParameters.ContainsKey("SkipMigrate")) {
+        $SkipMigrate = $true
+    }
+}
+
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $backendPath = Join-Path $root "backend"
-$streamlitPath = Join-Path $root "streamlit-client"
 $nextPath = Join-Path $root "frontend"
 $runDir = Join-Path $root ".run"
 $statePath = Join-Path $runDir "app-processes.json"
+
+$backendStdoutLog = Join-Path $runDir "backend.stdout.log"
+$backendStderrLog = Join-Path $runDir "backend.stderr.log"
+$frontendStdoutLog = Join-Path $runDir "frontend.stdout.log"
+$frontendStderrLog = Join-Path $runDir "frontend.stderr.log"
 
 New-Item -ItemType Directory -Path $runDir -Force | Out-Null
 
@@ -48,8 +64,7 @@ function Stop-PortOwner([int]$Port) {
 
 function Resolve-BasePython {
     $candidates = @(
-        (Join-Path $root "..\.venv\Scripts\python.exe"),
-        (Join-Path $root "..\..\.venv\Scripts\python.exe"),
+        (Join-Path (Split-Path -Parent $root) ".venv\Scripts\python.exe"),
         (Join-Path $root ".venv\Scripts\python.exe"),
         "python"
     )
@@ -64,7 +79,7 @@ function Resolve-BasePython {
         }
 
         if (Test-Path $candidate) {
-            return $candidate
+            return (Resolve-Path $candidate).Path
         }
     }
 
@@ -99,9 +114,12 @@ function Ensure-PythonRuntime(
             & $BasePython -m venv $venvPath
         }
 
-        $runtimePython = $venvPython
+        $runtimePython = (Resolve-Path $venvPython).Path
     }
     else {
+        if (Test-Path $runtimePython) {
+            $runtimePython = (Resolve-Path $runtimePython).Path
+        }
         Write-Step "Using shared Python runtime: $runtimePython"
     }
 
@@ -189,9 +207,8 @@ function Wait-ForHttp([string]$Url, [int]$TimeoutSeconds) {
 }
 
 if ($ForceRestart) {
-    Write-Step "Force restart enabled; clearing services on ports 8000, 8501, and 3000"
+    Write-Step "Force restart enabled; clearing services on ports 8000 and 3000"
     Stop-PortOwner -Port 8000
-    Stop-PortOwner -Port 8501
     Stop-PortOwner -Port 3000
 }
 
@@ -215,7 +232,9 @@ if ($StartInfra) {
 }
 
 $basePython = Resolve-BasePython
-Ensure-EnvFile -ServicePath $backendPath
+if (-not $Fast) {
+    Ensure-EnvFile -ServicePath $backendPath
+}
 
 $backendPython = Ensure-PythonRuntime `
     -ServicePath $backendPath `
@@ -243,58 +262,44 @@ $backendProcess = $null
 if ($null -eq (Get-PortOwner -Port 8000)) {
     Write-Step "Starting backend on http://127.0.0.1:8000"
     $backendCommand = "Set-Location '$backendPath'; & '$backendPython' -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload"
-    $backendProcess = Start-Process -FilePath "powershell" -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $backendCommand -WindowStyle Hidden -PassThru
+    $backendProcess = Start-Process -FilePath "powershell" -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $backendCommand -WindowStyle Hidden -RedirectStandardOutput $backendStdoutLog -RedirectStandardError $backendStderrLog -PassThru
 }
 else {
     Write-Step "Backend already running on port 8000"
 }
 
-if (Wait-ForHttp -Url "http://127.0.0.1:8000/health" -TimeoutSeconds 45) {
-    Write-Step "Backend is healthy"
-}
-else {
-    Write-Warning "Backend health endpoint did not respond in time."
+if ($waitForServices) {
+    if (Wait-ForHttp -Url "http://127.0.0.1:8000/health" -TimeoutSeconds 60) {
+        Write-Step "Backend is healthy"
+    }
+    else {
+        if ($backendProcess) {
+            $stillRunning = Get-Process -Id $backendProcess.Id -ErrorAction SilentlyContinue
+            if (-not $stillRunning) {
+                Write-Warning "Backend process exited early (PID $($backendProcess.Id)). Check logs: $backendStderrLog"
+            }
+        }
+        Write-Warning "Backend health endpoint did not respond in time. Logs: $backendStdoutLog / $backendStderrLog"
+    }
 }
 
 $frontendProcess = $null
-$frontendUrl = ""
+$frontendUrl = "http://127.0.0.1:3000"
 
-if ($Frontend -eq "streamlit") {
-    $streamlitPython = Ensure-PythonRuntime `
-        -ServicePath $streamlitPath `
-        -RequirementsPath (Join-Path $streamlitPath "requirements.txt") `
-        -BasePython $basePython `
-        -ServiceName "streamlit-client" `
-        -SkipInstallDeps:$SkipInstall `
-        -IsolatedVenv:$UseIsolatedVenv
+if (-not $Fast) {
+    Ensure-NodeRuntime -FrontendPath $nextPath -SkipInstallDeps:$SkipInstall
+}
 
-    if ($null -eq (Get-PortOwner -Port 8501)) {
-        Write-Step "Starting Streamlit on http://127.0.0.1:8501"
-        $streamlitCommand = "Set-Location '$streamlitPath'; & '$streamlitPython' -m streamlit run app.py --server.port 8501 --server.headless true"
-        $frontendProcess = Start-Process -FilePath "powershell" -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $streamlitCommand -WindowStyle Hidden -PassThru
-    }
-    else {
-        Write-Step "Streamlit already running on port 8501"
-    }
-
-    $frontendUrl = "http://127.0.0.1:8501"
-    if (-not (Wait-ForHttp -Url $frontendUrl -TimeoutSeconds 45)) {
-        Write-Warning "Streamlit did not respond in time."
-    }
+if ($null -eq (Get-PortOwner -Port 3000)) {
+    Write-Step "Starting Next frontend on http://127.0.0.1:3000"
+    $nextCommand = "Set-Location '$nextPath'; npm run dev"
+    $frontendProcess = Start-Process -FilePath "powershell" -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $nextCommand -WindowStyle Hidden -RedirectStandardOutput $frontendStdoutLog -RedirectStandardError $frontendStderrLog -PassThru
 }
 else {
-    Ensure-NodeRuntime -FrontendPath $nextPath -SkipInstallDeps:$SkipInstall
+    Write-Step "Next frontend already running on port 3000"
+}
 
-    if ($null -eq (Get-PortOwner -Port 3000)) {
-        Write-Step "Starting Next frontend on http://127.0.0.1:3000"
-        $nextCommand = "Set-Location '$nextPath'; npm run dev"
-        $frontendProcess = Start-Process -FilePath "powershell" -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $nextCommand -WindowStyle Hidden -PassThru
-    }
-    else {
-        Write-Step "Next frontend already running on port 3000"
-    }
-
-    $frontendUrl = "http://127.0.0.1:3000"
+if ($waitForServices) {
     if (-not (Wait-ForHttp -Url $frontendUrl -TimeoutSeconds 60)) {
         Write-Warning "Next frontend did not respond in time."
     }
@@ -307,6 +312,10 @@ $state = [ordered]@{
     frontend_pid = if ($frontendProcess) { $frontendProcess.Id } else { $null }
     backend_url = "http://127.0.0.1:8000"
     frontend_url = $frontendUrl
+    backend_stdout_log = $backendStdoutLog
+    backend_stderr_log = $backendStderrLog
+    frontend_stdout_log = $frontendStdoutLog
+    frontend_stderr_log = $frontendStderrLog
 }
 $state | ConvertTo-Json | Set-Content -Path $statePath
 
