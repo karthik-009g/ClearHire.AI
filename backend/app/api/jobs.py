@@ -91,6 +91,7 @@ def _to_job_item(row: JobPosting) -> JobItem:
         title=row.title,
         location=row.location,
         url=row.url,
+        description=row.description,
         score=row.score,
     )
 

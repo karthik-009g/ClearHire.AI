@@ -89,6 +89,7 @@ def test_resume_upload_match_and_tailor_flow(monkeypatch):
     )
     assert match.status_code == 200
     assert "total_score" in match.json()
+    assert match.json()["job_description_id"] > 0
 
     tailor = client.post(
         "/api/resumes/tailor",
@@ -168,16 +169,18 @@ def test_application_tracking_flow(monkeypatch):
     assert detail.status_code == 200
     assert detail.json()["latest_version"] == 1
 
+    job_description_id = match.json()["job_description_id"]
     create = client.post(
         "/api/applications/",
         json={
-            "job_description_id": 1,
+            "job_description_id": job_description_id,
             "resume_version_id": 1,
             "status": "pending",
             "notes": "Ready to apply",
         },
     )
     assert create.status_code == 200
+    assert create.json()["job_title"] == "Software Engineer"
     app_id = create.json()["id"]
 
     update = client.patch(f"/api/applications/{app_id}/status", json={"status": "applied", "notes": "Submitted"})

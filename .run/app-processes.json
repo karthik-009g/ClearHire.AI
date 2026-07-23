@@ -1,8 +1,0 @@
-{
-    "started_at":  "2026-04-23T14:32:24.6113414+05:30",
-    "frontend":  "next",
-    "backend_pid":  24220,
-    "frontend_pid":  16072,
-    "backend_url":  "http://127.0.0.1:8000",
-    "frontend_url":  "http://127.0.0.1:3000"
-}

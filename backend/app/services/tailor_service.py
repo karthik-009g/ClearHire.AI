@@ -7,6 +7,10 @@ from typing import Any
 
 
 class ResumeTailorService:
+    MAX_RESUME_LINES = 48
+    MAX_RESUME_WORDS = 620
+    MAX_BULLET_WORDS = 24
+
     @staticmethod
     def _normalize_spaces(text: str) -> str:
         return re.sub(r"[ \t]+", " ", text).strip()
@@ -20,7 +24,18 @@ class ResumeTailorService:
         if not missing_keywords:
             return resume_text
 
-        top_keywords = missing_keywords[:8]
+        seen: set[str] = set()
+        top_keywords: list[str] = []
+        for keyword in missing_keywords:
+            clean = ResumeTailorService._normalize_spaces(str(keyword))
+            key = clean.lower()
+            if not clean or key in seen:
+                continue
+            seen.add(key)
+            top_keywords.append(clean)
+            if len(top_keywords) >= 8:
+                break
+
         section_title = "\n\nTargeted Skills\n"
         section_body = ", ".join(top_keywords)
 
@@ -40,11 +55,44 @@ class ResumeTailorService:
                 bullet_body = self._normalize_spaces(bullet_body)
                 if len(bullet_body) > 0 and not re.search(r"\b\d+(?:\.\d+)?%?\b", bullet_body):
                     bullet_body = f"{bullet_body}; delivered measurable impact in quality or speed"
+                words = bullet_body.split()
+                if len(words) > self.MAX_BULLET_WORDS:
+                    bullet_body = " ".join(words[: self.MAX_BULLET_WORDS]).rstrip(".,;") + "."
                 improved.append(f"- {bullet_body}")
             else:
                 improved.append(line)
 
         return "\n".join(improved).strip()
+
+    def _enforce_one_page(self, resume_text: str) -> str:
+        """Approximate a one-page ATS resume in plain text while preserving section order."""
+        lines = [line.rstrip() for line in resume_text.splitlines()]
+        compact: list[str] = []
+        previous_blank = False
+        for line in lines:
+            blank = not line.strip()
+            if blank and previous_blank:
+                continue
+            compact.append(line)
+            previous_blank = blank
+
+        line_count = 0
+        word_count = 0
+        capped: list[str] = []
+        for line in compact:
+            words = line.split()
+            if line_count >= self.MAX_RESUME_LINES:
+                break
+            if word_count + len(words) > self.MAX_RESUME_WORDS:
+                remaining = self.MAX_RESUME_WORDS - word_count
+                if remaining > 6 and words:
+                    capped.append(" ".join(words[:remaining]).rstrip(".,;") + ".")
+                break
+            capped.append(line)
+            line_count += 1
+            word_count += len(words)
+
+        return "\n".join(capped).strip()
 
     @staticmethod
     def generate_cover_letter(
@@ -80,12 +128,19 @@ class ResumeTailorService:
         tailored = resume_text
         tailored = self._inject_missing_keywords(tailored, missing_keywords)
         tailored = self._tighten_bullets(tailored)
+        tailored = self._enforce_one_page(tailored)
 
         result: dict[str, Any] = {
             "tailored_resume_text": tailored,
             "change_summary": {
                 "keywords_added": missing_keywords[:8],
                 "bullet_improvements": True,
+                "ats_constraints": {
+                    "one_page_limit": True,
+                    "max_lines": self.MAX_RESUME_LINES,
+                    "max_words": self.MAX_RESUME_WORDS,
+                    "core_structure_preserved": True,
+                },
                 "controlled_style": "v1-deterministic",
             },
             "apply_ready_package": {

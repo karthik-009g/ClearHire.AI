@@ -156,13 +156,13 @@ Match Score = weighted(keyword_score, embedding_score)
 ### Start full system (Windows)
 
 ```powershell
-./start_app.ps1
+./app.ps1
 ```
 
 ### Stop system
 
 ```powershell
-./stop_app.ps1
+./app.ps1 -Action stop
 ```
 
 These scripts automate backend + frontend startup.
@@ -175,37 +175,38 @@ These scripts automate backend + frontend startup.
 clearhire-ai/
 ├── backend/
 ├── frontend/
-├── resume_analyzer/
 ├── docs/
 ├── deployment/
 ```
 
 ---
 
-## 🚧 Current Status
+## Current Status
 
-* ✅ Resume parsing + skill extraction
-* ✅ JD analysis + scoring
-* ✅ Job search + ranking
-* ✅ Multi-module UI system
-
----
-
-## 🗺️ Roadmap
-
-* [ ] Auto-apply agent (Playwright)
-* [ ] RAG-based resume optimization
-* [ ] Multi-agent orchestration
-* [ ] ATS-aware resume tailoring
-* [ ] Real-time job tracking
+* Resume upload, PDF/DOCX parsing, skill extraction, version history, and 30-day retention
+* Explainable JD matching with keyword gaps and embedding similarity
+* ATS-focused one-page resume tailoring and apply-ready ZIP export
+* Job discovery, resume-aware ranking, and pending/applied application tracking
+* Authenticated multi-module UI system
 
 ---
 
-## ⚠️ Limitations
+## Future Work
 
-* Auto-apply not implemented yet
-* Limited job source integrations
-* UI is under active development
+The V1 product scope is complete. Future work is intentionally outside V1:
+
+* [ ] Opt-in assisted application workflows (never autonomous submission)
+* [ ] Additional compliant job sources and richer job metadata
+* [ ] Optional LLM-assisted rewriting with explicit user review
+* [ ] Deployment automation and production observability
+
+---
+
+## Boundaries
+
+* Applications are tracked, but ClearHire does not submit them automatically.
+* Job discovery depends on the availability and terms of the configured sources.
+* Tailoring preserves the candidate's supplied experience and does not invent claims.
 
 ---
 

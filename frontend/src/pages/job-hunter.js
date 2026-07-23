@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import ModuleLayout from "../components/ModuleLayout";
 import { scrapeJobs } from "../api/jobs";
+import { listResumeVersions, tailorResume } from "../api/resumes";
 import {
   formatPercent,
   getJdContext,
@@ -16,9 +17,11 @@ export default function JobHunterPage() {
   const [keywordsText, setKeywordsText] = useState("");
   const [postedWithinHours, setPostedWithinHours] = useState(72);
   const [busy, setBusy] = useState(false);
+  const [tailorBusy, setTailorBusy] = useState(false);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [results, setResults] = useState([]);
+  const [tailorResult, setTailorResult] = useState(null);
 
   useEffect(() => {
     const resume = getResmatContext();
@@ -56,6 +59,71 @@ export default function JobHunterPage() {
       setError(err.message || "Job search failed.");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const buildJobsBrief = () => {
+    const selected = results.slice(0, 10);
+    const lines = selected.flatMap((job, index) => [
+      `Job ${index + 1}: ${job.title || "Untitled"} at ${job.company || "Unknown"}`,
+      `Source: ${job.source || "job-hunter"} | Location: ${job.location || "India"}`,
+      `Description: ${job.description || job.title || ""}`,
+    ]);
+
+    return [
+      "Tailor the resume toward the common requirements across these currently ranked jobs.",
+      "Keep the resume ATS-friendly, one page, and do not invent experience.",
+      ...lines,
+    ].join("\n");
+  };
+
+  const latestVersionNo = async () => {
+    if (!resumeContext?.resumeId) {
+      return 1;
+    }
+
+    try {
+      const payload = await listResumeVersions(resumeContext.resumeId);
+      const versions = payload.versions || [];
+      return versions.length ? Math.max(...versions.map((version) => version.version_no || 1)) : 1;
+    } catch {
+      return 1;
+    }
+  };
+
+  const onTailorForCurrentJobs = async () => {
+    if (!resumeContext?.resumeId) {
+      setError("Upload resume first in ResMat.ai before tailoring for jobs.");
+      return;
+    }
+
+    if (!results.length) {
+      setError("Search and rank jobs first so the Tailor Agent has current jobs.");
+      return;
+    }
+
+    setError("");
+    setInfo("");
+    setTailorBusy(true);
+
+    try {
+      const versionNo = await latestVersionNo();
+      const payload = await tailorResume({
+        resume_id: resumeContext.resumeId,
+        source_version_no: versionNo,
+        jd_text: buildJobsBrief(),
+        role: keywordsText || "Matched Job Set",
+        company: "Current Job Hunter results",
+        source: "job-hunter-tailor-agent",
+        include_cover_letter: false,
+      });
+
+      setTailorResult(payload);
+      setInfo(`Tailor Agent created one-page ATS resume v${payload.version_no} for current ranked jobs.`);
+    } catch (err) {
+      setError(err.message || "Tailor Agent failed.");
+    } finally {
+      setTailorBusy(false);
     }
   };
 
@@ -117,7 +185,12 @@ export default function JobHunterPage() {
       </div>
 
       <article className="mp-card">
-        <h3>Matched Jobs</h3>
+        <div className="mp-card-head">
+          <button type="button" className="mp-side-action" onClick={onTailorForCurrentJobs} disabled={tailorBusy || !results.length}>
+            {tailorBusy ? "Tailoring..." : "Tailor Resume"}
+          </button>
+          <h3>Matched Jobs</h3>
+        </div>
         <ul className="mp-list">
           {results.map((job) => (
             <li key={`${job.id}-${job.url}`}>
@@ -129,6 +202,18 @@ export default function JobHunterPage() {
           {!results.length && <li>No jobs listed yet. Run a search.</li>}
         </ul>
       </article>
+
+      {tailorResult && (
+        <article className="mp-card">
+          <h3>Tailored Resume For Current Jobs</h3>
+          <div className="mp-grid three">
+            <p>Total: {formatPercent(tailorResult.total_score)}</p>
+            <p>Keyword: {formatPercent(tailorResult.keyword_score)}</p>
+            <p>Embedding: {formatPercent(tailorResult.embedding_score)}</p>
+          </div>
+          <pre className="mp-pre">{tailorResult.tailored_resume_text}</pre>
+        </article>
+      )}
     </ModuleLayout>
   );
 }

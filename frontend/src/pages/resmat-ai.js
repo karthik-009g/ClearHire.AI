@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
 import ModuleLayout from "../components/ModuleLayout";
-import { getResumeDetail, listResumeVersions, reembedResume, uploadResume } from "../api/resumes";
+import { downloadTailoredPackage, getResumeDetail, listResumeVersions, reembedResume, tailorResume, uploadResume } from "../api/resumes";
 import { formatPercent, getJdContext, getResmatContext, normalizeSkills, setResmatContext } from "../lib/moduleState";
 
 export default function ResmatPage() {
@@ -12,6 +12,9 @@ export default function ResmatPage() {
   const [versions, setVersions] = useState([]);
   const [jdContext, setJdContextState] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [tailorBusy, setTailorBusy] = useState(false);
+  const [packageBusy, setPackageBusy] = useState(false);
+  const [tailorResult, setTailorResult] = useState(null);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
 
@@ -102,7 +105,80 @@ export default function ResmatPage() {
     }
   };
 
+  const latestVersionNo = versions.length ? Math.max(...versions.map((version) => version.version_no || 1)) : 1;
   const latestSkillGap = jdContext?.skillGap || [];
+
+  const onTailorForCurrentJd = async () => {
+    if (!resumeId) {
+      setError("Upload resume first before tailoring.");
+      return;
+    }
+
+    if (!jdContext?.jdText || jdContext.jdText.trim().length < 20) {
+      setError("Run JD Analyzer first so the Tailor Agent has a target job description.");
+      return;
+    }
+
+    setError("");
+    setInfo("");
+    setTailorBusy(true);
+
+    try {
+      const payload = await tailorResume({
+        resume_id: resumeId,
+        source_version_no: latestVersionNo,
+        jd_text: jdContext.jdText,
+        role: jdContext.roleTitle || "Target Role",
+        company: jdContext.companyName || null,
+        source: "resmat-tailor-agent",
+        include_cover_letter: false,
+      });
+
+      setTailorResult(payload);
+      await loadVersions(resumeId);
+      setInfo(`Tailor Agent created ATS-friendly resume v${payload.version_no}.`);
+    } catch (err) {
+      setError(err.message || "Tailor Agent failed.");
+    } finally {
+      setTailorBusy(false);
+    }
+  };
+
+  const onDownloadApplyPackage = async () => {
+    if (!resumeId || !jdContext?.jdText || jdContext.jdText.trim().length < 20) {
+      setError("Upload a resume and run JD Analyzer before creating an apply-ready package.");
+      return;
+    }
+
+    setError("");
+    setInfo("");
+    setPackageBusy(true);
+    try {
+      const result = await downloadTailoredPackage({
+        resume_id: resumeId,
+        source_version_no: latestVersionNo,
+        jd_text: jdContext.jdText,
+        role: jdContext.roleTitle || "Target Role",
+        company: jdContext.companyName || null,
+        source: "resmat-apply-package",
+        include_cover_letter: true,
+      });
+      const url = URL.createObjectURL(result.blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = result.filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      await loadVersions(resumeId);
+      setInfo("Apply-ready package downloaded with a new tailored resume version.");
+    } catch (err) {
+      setError(err.message || "Could not create apply-ready package.");
+    } finally {
+      setPackageBusy(false);
+    }
+  };
 
   return (
     <ModuleLayout
@@ -163,6 +239,27 @@ export default function ResmatPage() {
           <button type="button" onClick={() => router.push("/jd-analyzer")}>Send Context To JD Analyzer</button>
         </article>
       </div>
+
+      <article className="mp-card">
+        <h3>Resume Tailor Agent</h3>
+        <p className="mp-muted">Creates an ATS-friendly one-page version for the latest JD while preserving your resume structure.</p>
+        <button type="button" onClick={onTailorForCurrentJd} disabled={!resumeId || tailorBusy}>
+          {tailorBusy ? "Tailoring..." : "Tailor Resume For This"}
+        </button>
+        <button type="button" onClick={onDownloadApplyPackage} disabled={!resumeId || packageBusy}>
+          {packageBusy ? "Preparing package..." : "Download Apply-Ready Package"}
+        </button>
+        {tailorResult && (
+          <>
+            <div className="mp-grid three">
+              <p>Total: {formatPercent(tailorResult.total_score)}</p>
+              <p>Keyword: {formatPercent(tailorResult.keyword_score)}</p>
+              <p>Embedding: {formatPercent(tailorResult.embedding_score)}</p>
+            </div>
+            <pre className="mp-pre">{tailorResult.tailored_resume_text}</pre>
+          </>
+        )}
+      </article>
 
       <article className="mp-card">
         <h3>Parsed Summary (Raw)</h3>

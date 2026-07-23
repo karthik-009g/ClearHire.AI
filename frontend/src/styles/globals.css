@@ -760,6 +760,23 @@ pre {
   margin: 0 0 8px;
 }
 
+.mp-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.mp-card-head h3 {
+  margin: 0;
+}
+
+.mp-side-action {
+  width: auto;
+  min-width: 150px;
+  border-radius: 8px;
+}
+
 .mp-card.module {
   display: grid;
   min-height: 160px;

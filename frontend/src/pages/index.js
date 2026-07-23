@@ -20,6 +20,11 @@ const MODULES = [
     summary: "Auto-search jobs, match with resume context, and return ranked opportunities.",
   },
   {
+    href: "/applications",
+    title: "Applications",
+    summary: "Track pending and submitted applications with the resume version used for each role.",
+  },
+  {
     href: "/student-lab",
     title: "Student Lab",
     summary: "AI engineer growth modules: sprints, projects, and interview drills.",

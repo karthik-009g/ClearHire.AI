@@ -9,6 +9,7 @@ const MODULE_LINKS = [
   { href: "/resmat-ai", label: "ResMat.ai" },
   { href: "/jd-analyzer", label: "JD Analyzer" },
   { href: "/job-hunter", label: "Job Hunter" },
+  { href: "/applications", label: "Applications" },
   { href: "/student-lab", label: "Student Lab" },
 ];
 

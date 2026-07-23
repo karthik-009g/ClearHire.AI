@@ -1,4 +1,6 @@
 param(
+    [ValidateSet("start", "stop")]
+    [string]$Action = "start",
     [ValidateSet("next")]
     [string]$Frontend = "next",
     [switch]$Fast,
@@ -37,7 +39,7 @@ $frontendStderrLog = Join-Path $runDir "frontend.stderr.log"
 New-Item -ItemType Directory -Path $runDir -Force | Out-Null
 
 function Write-Step([string]$Message) {
-    Write-Host "[start-app] $Message" -ForegroundColor Cyan
+    Write-Host "[clearhire] $Message" -ForegroundColor Cyan
 }
 
 function Get-PortOwner([int]$Port) {
@@ -60,6 +62,40 @@ function Stop-PortOwner([int]$Port) {
         Write-Step "Stopping process $($proc.ProcessName) ($($proc.Id)) on port $Port"
         Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
     }
+}
+
+function Stop-IfRunning([int]$ProcessId) {
+    try {
+        $proc = Get-Process -Id $ProcessId -ErrorAction Stop
+        Write-Step "Stopping $($proc.ProcessName) ($ProcessId)"
+        Stop-Process -Id $ProcessId -Force
+    }
+    catch {
+        Write-Step "Process $ProcessId is not running"
+    }
+}
+
+function Stop-ClearHire {
+    if (Test-Path $statePath) {
+        $state = Get-Content -Path $statePath -Raw | ConvertFrom-Json
+        if ($state.backend_pid) {
+            Stop-IfRunning -ProcessId ([int]$state.backend_pid)
+        }
+        if ($state.frontend_pid) {
+            Stop-IfRunning -ProcessId ([int]$state.frontend_pid)
+        }
+    }
+
+    foreach ($port in 8000, 3000) {
+        Stop-PortOwner -Port $port
+    }
+
+    Write-Host "All known ClearHire processes stopped." -ForegroundColor Green
+}
+
+if ($Action -eq "stop") {
+    Stop-ClearHire
+    exit 0
 }
 
 function Resolve-BasePython {

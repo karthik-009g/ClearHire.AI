@@ -24,6 +24,7 @@ class MatchRequest(BaseModel):
 
 class MatchResponse(BaseModel):
     match_id: int
+    job_description_id: int
     keyword_score: float
     embedding_score: float
     total_score: float
@@ -51,6 +52,7 @@ class EvidenceItem(BaseModel):
 
 class ReconciledMatchResponse(BaseModel):
     match_id: int
+    job_description_id: int
     status: str
     keyword_score: float
     embedding_score: float

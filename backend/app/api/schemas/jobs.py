@@ -20,6 +20,7 @@ class JobItem(BaseModel):
     title: str
     location: str | None = None
     url: str
+    description: str | None = None
     score: float | None = None
 
 

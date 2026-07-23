@@ -286,6 +286,7 @@ def match_resume(
 
     return MatchResponse(
         match_id=match_result.id,
+        job_description_id=job.id,
         keyword_score=match_result.keyword_score,
         embedding_score=match_result.embedding_score,
         total_score=match_result.total_score,
@@ -377,6 +378,7 @@ def match_resume_reconciled(
 
     return ReconciledMatchResponse(
         match_id=match_result.id,
+        job_description_id=job.id,
         status=rag_output["status"],
         keyword_score=match_result.keyword_score,
         embedding_score=match_result.embedding_score,
