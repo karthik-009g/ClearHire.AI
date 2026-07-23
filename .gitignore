@@ -135,6 +135,7 @@ backend/.mypy_cache/
 backend/alembic/versions/__pycache__/
 
 # Runtime state (launcher)
+app.ps1
 .run/*.log
 .run/*.sha256
 .run/app-processes.json
