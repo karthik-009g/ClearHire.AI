@@ -2,6 +2,7 @@
 
 # Python
 __pycache__/
+<<<<<<< HEAD
 *.py[cod]
 *$py.class
 *.so
@@ -28,6 +29,15 @@ venv/
 ENV/
 env/
 .venv
+=======
+*.pyc
+.pytest_cache/
+
+# Ignore generated application and frontend build state
+.next/
+.run/
+node_modules/
+>>>>>>> 1a0e423 (Add application submit/autofill endpoints, rate limiter, and tests)
 
 # Virtual environments
 venv/
@@ -87,6 +97,7 @@ logs/
 *.sqlite3
 postgres_data/
 
+<<<<<<< HEAD
 # Secrets & credentials
 .aws/
 .env
@@ -145,4 +156,7 @@ frontend/.run/
 backend/storage/
 
 # Ignore downloaded resumes/storage (from remote)
+=======
+# Ignore downloaded resumes/storage
+>>>>>>> 1a0e423 (Add application submit/autofill endpoints, rate limiter, and tests)
 storage/resumes/
