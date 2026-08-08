@@ -6,6 +6,12 @@ env/
 # Ignore Python cache
 __pycache__/
 *.pyc
+.pytest_cache/
+
+# Ignore generated application and frontend build state
+.next/
+.run/
+node_modules/
 
 # Ignore secret environment variables
 .env
