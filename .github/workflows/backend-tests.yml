@@ -41,8 +41,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
+
+      - name: Checkout mirror submodule
+        run: git submodule update --init --remote
 
       - name: Set up Python
         uses: actions/setup-python@v5
