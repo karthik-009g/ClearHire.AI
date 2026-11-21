@@ -2,7 +2,9 @@
 
 from app.api import applications
 from app.api import auth
+from app.api import background_jobs
 from app.api import jobs
+from app.api import public_api
 from app.api import resumes
 
-__all__ = ["resumes", "applications", "auth", "jobs"]
+__all__ = ["resumes", "applications", "auth", "jobs", "background_jobs", "public_api"]

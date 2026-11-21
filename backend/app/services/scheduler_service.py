@@ -88,7 +88,6 @@ def sync_user_schedule(
         id=job_id,
         replace_existing=True,
         kwargs={"user_id": user_id},
-        next_run_time=datetime.now(),
     )
 
 

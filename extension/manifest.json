@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "ClearHire.AI — Smart Job Autofill & Ghosting Shield",
+  "version": "1.0.0",
+  "description": "Authentic direct ATS 1-click application autofill with AI ghosting risk intelligence for Workday, Greenhouse, Lever, Ashby, and Darwinbox.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://boards.greenhouse.io/*",
+    "https://jobs.lever.co/*",
+    "https://jobs.ashbyhq.com/*",
+    "https://*.myworkdayjobs.com/*",
+    "https://*.darwinbox.in/*",
+    "https://www.linkedin.com/*",
+    "http://localhost:8000/*",
+    "http://127.0.0.1:8000/*",
+    "https://*.clearhire.ai/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "ClearHire.AI Autofill"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://boards.greenhouse.io/*",
+        "https://jobs.lever.co/*",
+        "https://jobs.ashbyhq.com/*",
+        "https://*.myworkdayjobs.com/*",
+        "https://*.darwinbox.in/*",
+        "https://www.linkedin.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

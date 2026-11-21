@@ -1,33 +1,31 @@
 version: '3.9'
 
 services:
-  # PostgreSQL Database
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:0.8.7-pg16-bookworm
     container_name: job_automation_db
     environment:
-      POSTGRES_USER: job_user
-      POSTGRES_PASSWORD: job_password_secure
-      POSTGRES_DB: job_automation
+      POSTGRES_USER: ${POSTGRES_USER:-job_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-job_password_secure}
+      POSTGRES_DB: ${POSTGRES_DB:-job_automation}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U job_user"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-job_user}"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
       - job_automation_network
+    restart: unless-stopped
 
-  # Redis Cache
   redis:
     image: redis:7-alpine
     container_name: job_automation_cache
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -35,59 +33,78 @@ services:
       retries: 5
     networks:
       - job_automation_network
+    restart: unless-stopped
 
-  # FastAPI Backend
   backend:
     build:
-      context: ..
+      context: ../..
       dockerfile: deployment/docker/Dockerfile
     container_name: job_automation_backend
+    restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://job_user:job_password_secure@postgres:5432/job_automation
-      REDIS_URL: redis://redis:6379/0
-      DEBUG: "true"
-      ENVIRONMENT: development
-      # Add your API keys below
-      CLAUDE_API_KEY: ${CLAUDE_API_KEY:-sk-ant-your-key-here}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://job_user:job_password_secure@postgres:5432/job_automation}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      DEBUG: "${DEBUG:-true}"
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      AUTH_ENABLED: ${AUTH_ENABLED:-true}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost}
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-local}
+      STORAGE_BUCKET: ${STORAGE_BUCKET:-}
+      STORAGE_REGION: ${STORAGE_REGION:-}
+      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:-}
+      EMBEDDING_LOAD_LOCAL_MODEL: ${EMBEDDING_LOAD_LOCAL_MODEL:-false}
+      LLM_PROVIDER: ${LLM_PROVIDER:-groq}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - resume_data:/app/storage
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      - ../backend:/app
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     networks:
       - job_automation_network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
 
-  # Frontend React/Next.js
   frontend:
     build:
-      context: ../frontend
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile.frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
     container_name: job_automation_frontend
+    restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: http://backend:8000
-      NEXT_PUBLIC_ENV: development
+      NEXT_PUBLIC_ENV: ${NEXT_PUBLIC_ENV:-development}
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
-      - backend
-    volumes:
-      - ../frontend:/app
-      - /app/node_modules
+      backend:
+        condition: service_healthy
     networks:
       - job_automation_network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000', (r) => process.exit(r.statusCode >= 200 && r.statusCode < 400 ? 0 : 1))"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
 
-  # Nginx Reverse Proxy (Optional)
   nginx:
     image: nginx:alpine
     container_name: job_automation_nginx
+    profiles: ["proxy"]
     ports:
       - "80:80"
-      - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
@@ -98,6 +115,8 @@ services:
 
 volumes:
   postgres_data:
+    driver: local
+  resume_data:
     driver: local
 
 networks:

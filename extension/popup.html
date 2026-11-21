@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ClearHire.AI Autofill</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Header -->
+    <header class="popup-header">
+      <div class="logo-row">
+        <span class="shield-icon">🛡️</span>
+        <div>
+          <h1 class="brand-title">ClearHire.AI</h1>
+          <p class="brand-sub">Smart Autofill & Anti-Ghosting</p>
+        </div>
+      </div>
+      <span id="connection-pill" class="pill pill-connected">Connected</span>
+    </header>
+
+    <!-- Page Analysis Card -->
+    <section class="card analysis-card">
+      <div class="card-row">
+        <span class="label">Current Portal:</span>
+        <strong id="ats-name">Detecting...</strong>
+      </div>
+      <div class="card-row">
+        <span class="label">Ghosting Risk:</span>
+        <span id="ghosting-badge" class="badge badge-low">Analyzing...</span>
+      </div>
+      <div class="card-row">
+        <span class="label">Authenticity:</span>
+        <strong id="authenticity-score">--%</strong>
+      </div>
+    </section>
+
+    <!-- Candidate Profile Preview -->
+    <section class="card profile-card">
+      <h2 class="card-title">Candidate Profile</h2>
+      <div class="profile-details">
+        <div><strong>Name:</strong> <span id="cand-name">Loading...</span></div>
+        <div><strong>Notice Period:</strong> <span id="cand-notice">30 Days</span></div>
+        <div><strong>Expected CTC:</strong> <span id="cand-ctc">-- LPA</span></div>
+      </div>
+    </section>
+
+    <!-- Action Buttons -->
+    <div class="actions-group">
+      <button id="btn-autofill" class="btn btn-primary">
+        ⚡ 1-Click Autofill Application
+      </button>
+      <button id="btn-download-pdf" class="btn btn-secondary">
+        📥 Download ATS-Tailored PDF
+      </button>
+      <button id="btn-draft-outreach" class="btn btn-secondary">
+        ✉️ AI Recruiter InMail & Search
+      </button>
+      <button id="btn-copy-profile" class="btn btn-secondary">
+        📋 Copy Profile JSON
+      </button>
+    </div>
+
+    <!-- Status Message -->
+    <div id="status-msg" class="status-msg"></div>
+
+    <!-- Footer Links -->
+    <footer class="popup-footer">
+      <a href="http://localhost:3000/job-hunter" target="_blank" class="footer-link">
+        Open ClearHire Job Hunter ↗
+      </a>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

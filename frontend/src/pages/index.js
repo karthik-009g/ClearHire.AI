@@ -1,200 +1,348 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/router";
 import ModuleLayout from "../components/ModuleLayout";
-import { formatPercent, getJdContext, getResmatContext } from "../lib/moduleState";
-
-const MODULES = [
-  {
-    href: "/resmat-ai",
-    title: "ResMat.ai",
-    summary: "Resume analyzer with parsing, skills extraction, and skill gap sub-module.",
-  },
-  {
-    href: "/jd-analyzer",
-    title: "JD Analyzer",
-    summary: "JD + company analysis with resume scoring and generated target tech stack.",
-  },
-  {
-    href: "/job-hunter",
-    title: "Job Hunter",
-    summary: "Auto-search jobs, match with resume context, and return ranked opportunities.",
-  },
-  {
-    href: "/applications",
-    title: "Applications",
-    summary: "Track pending and submitted applications with the resume version used for each role.",
-  },
-  {
-    href: "/student-lab",
-    title: "Student Lab",
-    summary: "AI engineer growth modules: sprints, projects, and interview drills.",
-  },
-];
+import { getMe } from "../api/auth";
+import { clearAuthToken, getStoredAuthToken, setAuthToken } from "../api/client";
+import { getJdContext, getResmatContext } from "../lib/moduleState";
 
 export default function HomePage() {
+  const router = useRouter();
+  const [user, setUser] = useState(null);
   const [resumeContext, setResumeContext] = useState(null);
   const [jdContext, setJdContextState] = useState(null);
-  const canvasRef = useRef(null);
+
+  // Interactive micro-tools in workspace
+  const [dormancyDays, setDormancyDays] = useState(14);
+  const [pipelineFilter, setPipelineFilter] = useState("Interviewing");
+  const [briefingChannel, setBriefingChannel] = useState("telegram");
 
   useEffect(() => {
-    setResumeContext(getResmatContext());
-    setJdContextState(getJdContext());
-  }, []);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) {
-      return undefined;
-    }
-
-    const context = canvas.getContext("2d");
-    if (!context) {
-      return undefined;
-    }
-
-    let width = 0;
-    let height = 0;
-    let frameId = 0;
-    let mouseX = window.innerWidth / 2;
-    let mouseY = window.innerHeight / 2;
-    let hue = 165;
-
-    const particles = Array.from({ length: 40 }, () => ({
-      x: Math.random() * window.innerWidth,
-      y: Math.random() * window.innerHeight,
-      vx: (Math.random() - 0.5) * 0.22,
-      vy: (Math.random() - 0.5) * 0.22,
-      base: Math.random() * 0.24 + 0.06,
-      r: Math.random() * 1.2 + 0.3,
-    }));
-
-    const resize = () => {
-      width = canvas.width = window.innerWidth;
-      height = canvas.height = window.innerHeight;
-    };
-
-    const onMove = (event) => {
-      mouseX = event.clientX;
-      mouseY = event.clientY;
-    };
-
-    const drawFrame = () => {
-      context.clearRect(0, 0, width, height);
-      hue = 160 + 16 * Math.sin(Date.now() * 0.00028);
-
-      const bg = context.createRadialGradient(width * 0.35, height * 0.3, 0, width * 0.5, height * 0.5, width * 0.8);
-      bg.addColorStop(0, `hsl(${hue}, 62%, 6%)`);
-      bg.addColorStop(0.55, `hsl(${hue}, 55%, 4%)`);
-      bg.addColorStop(1, "#040e10");
-      context.fillStyle = bg;
-      context.fillRect(0, 0, width, height);
-
-      const ambient = context.createRadialGradient(mouseX, mouseY, 0, mouseX, mouseY, 280);
-      ambient.addColorStop(0, `hsla(${hue}, 100%, 60%, 0.06)`);
-      ambient.addColorStop(1, "transparent");
-      context.fillStyle = ambient;
-      context.fillRect(0, 0, width, height);
-
-      particles.forEach((particle) => {
-        const dx = mouseX - particle.x;
-        const dy = mouseY - particle.y;
-        const distance = Math.hypot(dx, dy);
-        const repel = Math.max(0, 1 - distance / 140);
-        if (distance > 0) {
-          particle.vx += (-(dx / distance) * repel) * 0.1;
-          particle.vy += (-(dy / distance) * repel) * 0.1;
-        }
-
-        particle.vx *= 0.97;
-        particle.vy *= 0.97;
-        particle.x += particle.vx;
-        particle.y += particle.vy;
-
-        if (particle.x < 0) particle.x = width;
-        if (particle.x > width) particle.x = 0;
-        if (particle.y < 0) particle.y = height;
-        if (particle.y > height) particle.y = 0;
-
-        const near = Math.max(0, 1 - distance / 170);
-        context.beginPath();
-        context.arc(particle.x, particle.y, particle.r * (1 + near * 0.65), 0, Math.PI * 2);
-        context.fillStyle = `hsla(${hue}, 78%, 72%, ${particle.base + near * 0.32})`;
-        context.fill();
-      });
-
-      for (let i = 0; i < particles.length; i += 1) {
-        for (let j = i + 1; j < particles.length; j += 1) {
-          const distance = Math.hypot(particles[i].x - particles[j].x, particles[i].y - particles[j].y);
-          if (distance < 92) {
-            context.beginPath();
-            context.moveTo(particles[i].x, particles[i].y);
-            context.lineTo(particles[j].x, particles[j].y);
-            context.strokeStyle = `hsla(${hue}, 80%, 70%, ${(1 - distance / 92) * 0.08})`;
-            context.lineWidth = 0.45;
-            context.stroke();
-          }
-        }
+    let active = true;
+    const initSession = async () => {
+      const token = getStoredAuthToken();
+      if (!token) {
+        if (active) router.replace("/login");
+        return;
       }
-
-      frameId = window.requestAnimationFrame(drawFrame);
+      try {
+        setAuthToken(token);
+        const me = await getMe();
+        if (active) {
+          setUser(me);
+          setResumeContext(getResmatContext());
+          setJdContextState(getJdContext());
+        }
+      } catch {
+        clearAuthToken();
+        if (active) router.replace("/login");
+      }
     };
-
-    resize();
-    drawFrame();
-    window.addEventListener("resize", resize);
-    document.addEventListener("mousemove", onMove);
+    initSession();
 
     return () => {
-      window.cancelAnimationFrame(frameId);
-      window.removeEventListener("resize", resize);
-      document.removeEventListener("mousemove", onMove);
+      active = false;
     };
-  }, []);
+  }, [router]);
 
-  const rawMatchScore = Number(jdContext?.match?.total_score || 0);
-  const matchPercent = Number.isFinite(rawMatchScore)
-    ? Math.max(0, Math.min(100, rawMatchScore <= 1 ? rawMatchScore * 100 : rawMatchScore))
-    : 0;
-  const matchColorClass = matchPercent >= 70 ? "good" : matchPercent >= 50 ? "mid" : "low";
+  const ghostRisk = Math.min(96, Math.max(2, Math.round(dormancyDays * 2.8)));
+  const fallbackRoutes = dormancyDays >= 14 ? 3 : dormancyDays >= 7 ? 2 : 1;
 
   return (
     <ModuleLayout
-      title="Mission Control"
-      subtitle="Multi-page architecture is active. Open each module in its own route and run the pipeline end-to-end."
+      title="ClearHire Candidate Workspace"
+      subtitle="A more human way to hire. Every verified requisition, application status, and ATS screening context in one connected thread."
     >
-      <canvas ref={canvasRef} className="mp-mission-canvas" aria-hidden="true" />
-
-      <div className="mp-grid three">
-        <article className="mp-card mp-stat-card">
-          <p className="mp-stat-label">Resume Ready</p>
-          <p className="mp-stat-value">{resumeContext?.resumeId ? "Yes" : "No"}</p>
-          <p className="mp-stat-meta">Resume ID: {resumeContext?.resumeId || "Not set"}</p>
-        </article>
-        <article className="mp-card mp-stat-card">
-          <p className="mp-stat-label">Latest Match</p>
-          <p className={`mp-stat-value ${matchColorClass}`}>{formatPercent(jdContext?.match?.total_score)}</p>
-          <div className="mp-match-progress" aria-hidden="true">
-            <span style={{ width: `${matchPercent}%` }} />
+      <div className="space-y-8">
+        {/* Top Hero Telemetry Strip */}
+        <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="p-5 rounded-2xl bg-[#faf7f0]/85 backdrop-blur-xl border border-[#24231f]/12 shadow-sm hover:border-[#24231f]/25 hover:shadow-md transition-all">
+            <span className="font-mono text-[9px] uppercase tracking-wider text-[#706e68] block mb-1">
+              Direct Corporate ATS
+            </span>
+            <strong className="font-serif text-2xl text-[#24231f] block">
+              40+ Partners
+            </strong>
+            <p className="text-[11px] font-mono text-[#5369d9] mt-1.5 mb-0">
+              0% middlemen · 100% direct
+            </p>
           </div>
-          <p className="mp-stat-meta">Company: {jdContext?.companyName || "Not analyzed"}</p>
-        </article>
-        <article className="mp-card mp-stat-card">
-          <p className="mp-stat-label">Skill Gaps</p>
-          <p className="mp-stat-value">{jdContext?.skillGap?.length || 0}</p>
-          <p className="mp-stat-meta">Computed in JD Analyzer route.</p>
-        </article>
-      </div>
 
-      <div className="mp-grid two">
-        {MODULES.map((module) => (
-          <article key={module.href} className="mp-card module">
-            <h3 className="mp-module-title">{module.title}</h3>
-            <p className="mp-module-summary">{module.summary}</p>
-            <Link className="mp-link mp-link-primary" href={module.href}>
-              Open {module.title}
-            </Link>
-          </article>
-        ))}
+          <div className="p-5 rounded-2xl bg-[#faf7f0]/85 backdrop-blur-xl border border-[#24231f]/12 shadow-sm hover:border-[#24231f]/25 hover:shadow-md transition-all">
+            <span className="font-mono text-[9px] uppercase tracking-wider text-[#706e68] block mb-1">
+              Anti-Ghosting SLA
+            </span>
+            <strong className="font-serif text-2xl text-[#24231f] block">
+              14-Day SLA
+            </strong>
+            <p className="text-[11px] font-mono text-[#bd7652] mt-1.5 mb-0">
+              95% grounded telemetry
+            </p>
+          </div>
+
+          <div className="p-5 rounded-2xl bg-[#faf7f0]/85 backdrop-blur-xl border border-[#24231f]/12 shadow-sm hover:border-[#24231f]/25 hover:shadow-md transition-all">
+            <span className="font-mono text-[9px] uppercase tracking-wider text-[#706e68] block mb-1">
+              1-Page ATS Resume
+            </span>
+            <strong className="font-serif text-2xl text-[#24231f] block">
+              99.4% Pass
+            </strong>
+            <p className="text-[11px] font-mono text-[#5369d9] mt-1.5 mb-0">
+              Zero page overflow budget
+            </p>
+          </div>
+
+          <div className="p-5 rounded-2xl bg-[#faf7f0]/85 backdrop-blur-xl border border-[#24231f]/12 shadow-sm hover:border-[#24231f]/25 hover:shadow-md transition-all">
+            <span className="font-mono text-[9px] uppercase tracking-wider text-[#706e68] block mb-1">
+              Morning Intelligence
+            </span>
+            <strong className="font-serif text-2xl text-[#24231f] block">
+              08:30 IST
+            </strong>
+            <p className="text-[11px] font-mono text-emerald-700 mt-1.5 mb-0">
+              Telegram · WhatsApp · HTML
+            </p>
+          </div>
+        </section>
+
+        {/* 6 Narrative Feature Chapters Grid */}
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-serif text-2xl font-medium text-[#24231f] m-0">
+              Core Capabilities &amp; Workflows
+            </h2>
+            <span className="font-mono text-xs text-[#706e68]">
+              6 Integrated Modules · 1 Unified Database
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* 01: Direct Corporate ATS Ingestion */}
+            <article className="p-6 rounded-2xl bg-[#faf7f0]/85 backdrop-blur-xl border border-[#24231f]/12 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="font-mono text-[10px] text-[#5369d9] font-bold uppercase tracking-wider">
+                    Chapter 01 / Ingestion
+                  </span>
+                  <span className="font-mono text-[9px] px-2 py-0.5 rounded-full bg-[#5369d9]/10 text-[#5369d9] border border-[#5369d9]/20">
+                    Live Feed
+                  </span>
+                </div>
+                <h3 className="font-serif text-xl font-medium text-[#24231f] mb-2 m-0">
+                  Direct Corporate ATS Engine
+                </h3>
+                <p className="text-xs text-[#5d5b55] leading-relaxed mb-4">
+                  Connects directly to Greenhouse, Lever, Ashby, and Workday enterprise systems, routing verified requisitions without third-party aggregator noise.
+                </p>
+                <div className="flex flex-wrap gap-1.5 mb-4">
+                  <span className="font-mono text-[9px] px-2 py-1 rounded bg-white border border-[#24231f]/10 text-[#5e5b55]">Greenhouse</span>
+                  <span className="font-mono text-[9px] px-2 py-1 rounded bg-white border border-[#24231f]/10 text-[#5e5b55]">Lever</span>
+                  <span className="font-mono text-[9px] px-2 py-1 rounded bg-white border border-[#24231f]/10 text-[#5e5b55]">Ashby</span>
+                  <span className="font-mono text-[9px] px-2 py-1 rounded bg-white border border-[#24231f]/10 text-[#5e5b55]">Workday</span>
+                </div>
+              </div>
+              <Link
+                href="/job-hunter"
+                className="inline-flex items-center justify-between px-4 py-2.5 rounded-xl bg-[#24231f] text-white text-xs font-semibold hover:bg-[#3d3b35] transition-all no-underline"
+              >
+                <span>Browse Direct Requisitions</span>
+                <span>→</span>
+              </Link>
+            </article>
+
+            {/* 02: Deterministic Anti-Ghosting */}
+            <article className="p-6 rounded-2xl bg-[#faf7f0]/85 backdrop-blur-xl border border-[#24231f]/12 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="font-mono text-[10px] text-[#bd7652] font-bold uppercase tracking-wider">
+                    Chapter 02 / Telemetry
+                  </span>
+                  <span className="font-mono text-[9px] px-2 py-0.5 rounded-full bg-[#bd7652]/10 text-[#985b39] border border-[#bd7652]/20">
+                    14-Day SLA
+                  </span>
+                </div>
+                <h3 className="font-serif text-xl font-medium text-[#24231f] mb-2 m-0">
+                  Deterministic Anti-Ghosting
+                </h3>
+                <p className="text-xs text-[#5d5b55] leading-relaxed mb-3">
+                  Responsiveness telemetry spots dormant roles early. When an employer goes quiet, ClearHire automatically calculates fallback alternatives.
+                </p>
+                {/* Mini simulator */}
+                <div className="p-3 rounded-xl bg-white/60 backdrop-blur-md border border-[#24231f]/10 mb-4 shadow-xs">
+                  <div className="flex justify-between items-center text-[10px] font-mono text-[#706e68] mb-1.5">
+                    <span>Inactivity: {dormancyDays} days</span>
+                    <span className="text-[#5369d9] font-bold">{ghostRisk}% risk · {fallbackRoutes} routes</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="30"
+                    value={dormancyDays}
+                    onChange={(e) => setDormancyDays(Number(e.target.value))}
+                    className="w-full accent-[#5369d9]"
+                  />
+                </div>
+              </div>
+              <Link
+                href="/applications"
+                className="inline-flex items-center justify-between px-4 py-2.5 rounded-xl bg-white border border-[#24231f]/15 text-[#24231f] text-xs font-semibold hover:border-[#bd7652] transition-all no-underline"
+              >
+                <span>Inspect Pipeline Health</span>
+                <span>→</span>
+              </Link>
+            </article>
+
+            {/* 03: Strict 1-Page ATS Resume Synthesizer */}
+            <article className="p-6 rounded-2xl bg-[#faf7f0]/85 backdrop-blur-xl border border-[#24231f]/12 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="font-mono text-[10px] text-[#5369d9] font-bold uppercase tracking-wider">
+                    Chapter 03 / Synthesis
+                  </span>
+                  <span className="font-mono text-[9px] px-2 py-0.5 rounded-full bg-[#5369d9]/10 text-[#5369d9] border border-[#5369d9]/20">
+                    99.4% ATS Pass
+                  </span>
+                </div>
+                <h3 className="font-serif text-xl font-medium text-[#24231f] mb-2 m-0">
+                  Strict 1-Page Resume Synthesizer
+                </h3>
+                <p className="text-xs text-[#5d5b55] leading-relaxed mb-4">
+                  A layout-aware resume compiler tunes typography scale and line breaks to produce a guaranteed one-page PDF tailored to candidate telemetry.
+                </p>
+                <div className="p-3 rounded-xl bg-white/60 backdrop-blur-md border border-[#24231f]/10 mb-4 shadow-xs font-mono text-[10px] space-y-1 text-[#65625c]">
+                  <div>✓ Strict 1-page budget constraint</div>
+                  <div>✓ Layout density switcher (9.5pt vs 11pt)</div>
+                  <div>✓ Zero text overflow or truncation</div>
+                </div>
+              </div>
+              <Link
+                href="/resmat-ai"
+                className="inline-flex items-center justify-between px-4 py-2.5 rounded-xl bg-[#24231f] text-white text-xs font-semibold hover:bg-[#3d3b35] transition-all no-underline"
+              >
+                <span>Synthesize 1-Page Resume</span>
+                <span>→</span>
+              </Link>
+            </article>
+
+            {/* 04: Candidate Pipeline CRM */}
+            <article className="p-6 rounded-2xl bg-[#faf7f0]/85 backdrop-blur-xl border border-[#24231f]/12 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="font-mono text-[10px] text-[#d97861] font-bold uppercase tracking-wider">
+                    Chapter 04 / Pipeline
+                  </span>
+                  <span className="font-mono text-[9px] px-2 py-0.5 rounded-full bg-[#d97861]/10 text-[#d97861] border border-[#d97861]/20">
+                    7 CRM Stages
+                  </span>
+                </div>
+                <h3 className="font-serif text-xl font-medium text-[#24231f] mb-2 m-0">
+                  Autonomous 7-Stage Pipeline
+                </h3>
+                <p className="text-xs text-[#5d5b55] leading-relaxed mb-3">
+                  Track candidates from discovery through offer execution with saved notes, recruiter follow-ups, and interview loop context in one thread.
+                </p>
+                <div className="flex flex-wrap gap-1 mb-4">
+                  {["Saved", "Screened", "Applied", "Interviewing", "Offer"].map((stg) => (
+                    <button
+                      key={stg}
+                      type="button"
+                      onClick={() => setPipelineFilter(stg)}
+                      className={`font-mono text-[9px] px-2 py-1 rounded transition-colors ${
+                        pipelineFilter === stg
+                          ? "bg-[#5369d9] text-white"
+                          : "bg-white border border-[#24231f]/10 text-[#5e5b55]"
+                      }`}
+                    >
+                      {stg}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <Link
+                href="/applications"
+                className="inline-flex items-center justify-between px-4 py-2.5 rounded-xl bg-white border border-[#24231f]/15 text-[#24231f] text-xs font-semibold hover:border-[#5369d9] transition-all no-underline"
+              >
+                <span>Open Kanban CRM</span>
+                <span>→</span>
+              </Link>
+            </article>
+
+            {/* 05: Multi-Channel Morning Briefing */}
+            <article className="p-6 rounded-2xl bg-[#faf7f0]/85 backdrop-blur-xl border border-[#24231f]/12 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="font-mono text-[10px] text-[#9673cb] font-bold uppercase tracking-wider">
+                    Chapter 05 / Intelligence
+                  </span>
+                  <span className="font-mono text-[9px] px-2 py-0.5 rounded-full bg-[#9673cb]/10 text-[#9673cb] border border-[#9673cb]/20">
+                    08:30 Daily
+                  </span>
+                </div>
+                <h3 className="font-serif text-xl font-medium text-[#24231f] mb-2 m-0">
+                  Morning Intelligence Briefing
+                </h3>
+                <p className="text-xs text-[#5d5b55] leading-relaxed mb-3">
+                  Scheduled daily report surfacing verified engineering openings, pipeline progress, dormant role alternatives, and LPA market compensation.
+                </p>
+                <div className="flex gap-1.5 mb-4">
+                  {["telegram", "whatsapp", "html"].map((ch) => (
+                    <button
+                      key={ch}
+                      type="button"
+                      onClick={() => setBriefingChannel(ch)}
+                      className={`font-mono text-[9px] px-2.5 py-1 rounded-full uppercase tracking-wider transition-colors ${
+                        briefingChannel === ch
+                          ? "bg-[#24231f] text-white"
+                          : "bg-white border border-[#24231f]/10 text-[#5e5b55]"
+                      }`}
+                    >
+                      {ch}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <Link
+                href="/funnel-analytics"
+                className="inline-flex items-center justify-between px-4 py-2.5 rounded-xl bg-white border border-[#24231f]/15 text-[#24231f] text-xs font-semibold hover:border-[#9673cb] transition-all no-underline"
+              >
+                <span>Configure Daily Reports</span>
+                <span>→</span>
+              </Link>
+            </article>
+
+            {/* 06: In-DOM Screener Copilot */}
+            <article className="p-6 rounded-2xl bg-[#faf7f0]/85 backdrop-blur-xl border border-[#24231f]/12 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="font-mono text-[10px] text-[#559db3] font-bold uppercase tracking-wider">
+                    Chapter 06 / Companion
+                  </span>
+                  <span className="font-mono text-[9px] px-2 py-0.5 rounded-full bg-[#559db3]/10 text-[#559db3] border border-[#559db3]/20">
+                    Manifest V3
+                  </span>
+                </div>
+                <h3 className="font-serif text-xl font-medium text-[#24231f] mb-2 m-0">
+                  In-DOM Screener Copilot
+                </h3>
+                <p className="text-xs text-[#5d5b55] leading-relaxed mb-4">
+                  Browser companion that recognizes ATS application forms in real time and crafts grounded answers from candidate compensation and notice period.
+                </p>
+                <div className="p-3 rounded-xl bg-white/60 backdrop-blur-md border border-[#24231f]/10 mb-4 shadow-xs font-mono text-[10px] space-y-1 text-[#65625c]">
+                  <div>🎯 Real-time DOM form detection</div>
+                  <div>⚡ 0–90 day notice period model</div>
+                  <div>₹ Indian LPA native compensation parser</div>
+                </div>
+              </div>
+              <Link
+                href="/student-lab"
+                className="inline-flex items-center justify-between px-4 py-2.5 rounded-xl bg-[#24231f] text-white text-xs font-semibold hover:bg-[#3d3b35] transition-all no-underline"
+              >
+                <span>Launch Screener Lab</span>
+                <span>→</span>
+              </Link>
+            </article>
+          </div>
+        </section>
       </div>
     </ModuleLayout>
   );

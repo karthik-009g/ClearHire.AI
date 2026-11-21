@@ -12,7 +12,7 @@ from app.database import get_db
 from app.models import Application, Resume, User, UserPreference
 from app.services.scheduler_service import run_on_login
 from app.services.storage import get_storage_provider
-from app.utils.auth import create_access_token, get_current_user_optional, hash_password, verify_password
+from app.utils.auth import create_access_token, get_current_user_optional, hash_password, invalidate_user_cache, verify_password
 from app.utils.config import settings
 
 router = APIRouter()
@@ -56,7 +56,12 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
     if existing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already exists")
 
-    user = User(email=request.email.lower(), password_hash=hash_password(request.password))
+    full_name = request.full_name.strip() if request.full_name else None
+    user = User(
+        email=request.email.lower(),
+        password_hash=hash_password(request.password),
+        full_name=full_name or None,
+    )
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -69,9 +74,24 @@ def login(request: LoginRequest, background_tasks: BackgroundTasks, db: Session 
     if not settings.auth_enabled:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Auth is disabled")
 
-    user = db.query(User).filter(User.email == request.email.lower()).first()
-    if not user or not verify_password(request.password, user.password_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+    clean_email = request.email.strip().lower()
+    user = db.query(User).filter(User.email == clean_email).first()
+    if not user:
+        if getattr(settings, "auth_auto_provision_users", False):
+            user = User(email=clean_email, password_hash=hash_password(request.password))
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password",
+            )
+    elif not verify_password(request.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password",
+        )
 
     background_tasks.add_task(run_on_login, user.id)
     token = create_access_token(user.id)
@@ -114,6 +134,7 @@ def update_me(
     user.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(user)
+    invalidate_user_cache(user.id)
     return _to_user_response(user)
 
 
@@ -138,6 +159,7 @@ def delete_account(
     db.query(UserPreference).filter(UserPreference.user_id == user.id).delete(synchronize_session=False)
     db.delete(user)
     db.commit()
+    invalidate_user_cache(user.id)
 
     return DeleteAccountResponse(
         deleted=True,

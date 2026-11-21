@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clearhire-backend
+  labels:
+    app: clearhire-backend
+spec:
+  # The current background job queue is in-process; do not scale until it is durable/shared.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: clearhire-backend
+  template:
+    metadata:
+      labels:
+        app: clearhire-backend
+    spec:
+      containers:
+        - name: backend
+          image: clearhire/backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: clearhire-config
+            - secretRef:
+                name: clearhire-secrets
+          env:
+            - name: ENVIRONMENT
+              value: production
+            - name: DEBUG
+              value: "false"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: clearhire-secrets
+                  key: DATABASE_URL
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: clearhire-secrets
+                  key: REDIS_URL
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: clearhire-secrets
+                  key: SECRET_KEY
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop: ["ALL"]
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: clearhire-backend
+spec:
+  selector:
+    app: clearhire-backend
+  ports:
+    - port: 80
+      targetPort: 8000
+      protocol: TCP

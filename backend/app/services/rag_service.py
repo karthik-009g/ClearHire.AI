@@ -41,7 +41,11 @@ class RetrievedEvidence:
 
 class ReconciledRAGService:
     def __init__(self, matcher_service: ResumeMatcherService | None = None) -> None:
-        self.matcher = matcher_service or ResumeMatcherService(embedding_model_name=settings.embedding_model_name)
+        self.matcher = matcher_service or ResumeMatcherService(
+            embedding_model_name=settings.embedding_model_name,
+            embedding_dimensions=settings.embedding_dimensions,
+            load_embedding_model=settings.embedding_load_local_model,
+        )
 
     @staticmethod
     def _vector_literal(vector: list[float]) -> str:
@@ -291,6 +295,34 @@ class ReconciledRAGService:
 
         return False
 
+    @staticmethod
+    def _evidence_quality(
+        evidence: list[RetrievedEvidence],
+        matched_skills: list[str],
+        resume_skills: list[str],
+    ) -> dict[str, Any]:
+        distinct_sources = {item.source_table for item in evidence if item.source_table}
+        distinct_companies = {
+            item.company.strip().lower()
+            for item in evidence
+            if item.company and item.company.strip()
+        }
+        top_similarity = evidence[0].similarity if evidence else 0.0
+        strong_evidence_count = sum(
+            1 for item in evidence if item.similarity >= settings.rag_similarity_threshold
+        )
+        overlap_ratio = len(matched_skills) / max(1, len(resume_skills))
+
+        return {
+            "evidence_count": len(evidence),
+            "strong_evidence_count": strong_evidence_count,
+            "top_similarity": round(top_similarity, 4),
+            "distinct_source_count": len(distinct_sources),
+            "distinct_company_count": len(distinct_companies),
+            "skill_overlap_ratio": round(overlap_ratio, 4),
+            "min_skill_overlap_ratio": settings.rag_reconcile_min_overlap,
+        }
+
     def _reconcile(
         self,
         match_data: dict[str, Any],
@@ -307,6 +339,8 @@ class ReconciledRAGService:
                 "confidence": 0.0,
                 "skill_overlap": [],
                 "skill_overlap_ratio": 0.0,
+                "evidence_quality": self._evidence_quality([], [], resume_skills),
+                "reason_codes": ["no_retrieval_evidence"],
             }
 
         top_similarity = evidence[0].similarity
@@ -318,6 +352,8 @@ class ReconciledRAGService:
                 "confidence": round(top_similarity, 4),
                 "skill_overlap": [],
                 "skill_overlap_ratio": 0.0,
+                "evidence_quality": self._evidence_quality(evidence, [], resume_skills),
+                "reason_codes": ["top_similarity_below_threshold"],
             }
 
         if self._has_conflicting_top_evidence(
@@ -332,11 +368,14 @@ class ReconciledRAGService:
                 "confidence": round(top_similarity, 4),
                 "skill_overlap": [],
                 "skill_overlap_ratio": 0.0,
+                "evidence_quality": self._evidence_quality(evidence, [], resume_skills),
+                "reason_codes": ["conflicting_top_evidence"],
             }
 
         evidence_text = " ".join(item.snippet.lower() for item in evidence)
         matched_skills = [skill for skill in resume_skills if skill in evidence_text]
         overlap_ratio = len(matched_skills) / max(1, len(resume_skills))
+        evidence_quality = self._evidence_quality(evidence, matched_skills, resume_skills)
 
         title_bonus = 0.0
         if requested_title:
@@ -359,6 +398,19 @@ class ReconciledRAGService:
         )
         confidence = max(0.0, min(1.0, confidence))
 
+        min_overlap = max(0.0, min(1.0, settings.rag_reconcile_min_overlap))
+        if resume_skills and overlap_ratio < min_overlap:
+            return {
+                "status": "insufficient_skill_evidence",
+                "abstained": True,
+                "abstain_reason": "Insufficient skill evidence, needs review",
+                "confidence": round(confidence, 4),
+                "skill_overlap": matched_skills,
+                "skill_overlap_ratio": round(overlap_ratio, 4),
+                "evidence_quality": evidence_quality,
+                "reason_codes": ["skill_overlap_below_threshold"],
+            }
+
         if confidence < settings.rag_abstain_threshold:
             return {
                 "status": "low_confidence",
@@ -367,6 +419,8 @@ class ReconciledRAGService:
                 "confidence": round(confidence, 4),
                 "skill_overlap": matched_skills,
                 "skill_overlap_ratio": round(overlap_ratio, 4),
+                "evidence_quality": evidence_quality,
+                "reason_codes": ["confidence_below_threshold"],
             }
 
         return {
@@ -376,6 +430,8 @@ class ReconciledRAGService:
             "confidence": round(confidence, 4),
             "skill_overlap": matched_skills,
             "skill_overlap_ratio": round(overlap_ratio, 4),
+            "evidence_quality": evidence_quality,
+            "reason_codes": ["evidence_reconciled"],
         }
 
     def _generate_grounded_answer(
@@ -490,6 +546,8 @@ class ReconciledRAGService:
             "latency_ms": latency_ms,
             "skill_overlap": reconciliation["skill_overlap"],
             "skill_overlap_ratio": reconciliation["skill_overlap_ratio"],
+            "evidence_quality": reconciliation["evidence_quality"],
+            "reconciliation_reasons": reconciliation["reason_codes"],
             "resume_evidence_lines": self._extract_resume_evidence_lines(
                 resume_version.content_text,
                 reconciliation["skill_overlap"],

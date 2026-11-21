@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
 import ModuleLayout from "../components/ModuleLayout";
 import { downloadTailoredPackage, getResumeDetail, listResumeVersions, reembedResume, tailorResume, uploadResume } from "../api/resumes";
@@ -6,11 +6,12 @@ import { formatPercent, getJdContext, getResmatContext, normalizeSkills, setResm
 
 export default function ResmatPage() {
   const router = useRouter();
+  const [initialResumeContext] = useState(() => getResmatContext());
   const [file, setFile] = useState(null);
-  const [resumeId, setResumeId] = useState("");
-  const [parsedSummary, setParsedSummary] = useState(null);
+  const [resumeId, setResumeId] = useState(initialResumeContext?.resumeId || "");
+  const [parsedSummary, setParsedSummary] = useState(initialResumeContext?.parsedSummary || null);
   const [versions, setVersions] = useState([]);
-  const [jdContext, setJdContextState] = useState(null);
+  const [jdContext] = useState(() => getJdContext());
   const [busy, setBusy] = useState(false);
   const [tailorBusy, setTailorBusy] = useState(false);
   const [packageBusy, setPackageBusy] = useState(false);
@@ -20,18 +21,21 @@ export default function ResmatPage() {
 
   const resumeSkills = useMemo(() => normalizeSkills(parsedSummary?.skills || []), [parsedSummary]);
 
-  useEffect(() => {
-    const existing = getResmatContext();
-    if (existing?.resumeId) {
-      setResumeId(existing.resumeId);
-      // Keep stored resumes in sync with the latest parser/embedding pipeline automatically.
-      syncResumeDetail(existing.resumeId, { refreshEmbeddings: true, silent: true });
+  const loadVersions = useCallback(async (id) => {
+    if (!id) {
+      setVersions([]);
+      return;
     }
 
-    setJdContextState(getJdContext());
+    try {
+      const payload = await listResumeVersions(id);
+      setVersions(payload.versions || []);
+    } catch {
+      setVersions([]);
+    }
   }, []);
 
-  const syncResumeDetail = async (id, options = {}) => {
+  const syncResumeDetail = useCallback(async (id, options = {}) => {
     const { refreshEmbeddings = false, silent = false } = options;
     if (!id) {
       return;
@@ -59,21 +63,16 @@ export default function ResmatPage() {
         setError("Could not refresh parsed summary right now.");
       }
     }
-  };
+  }, [loadVersions]);
 
-  const loadVersions = async (id) => {
-    if (!id) {
-      setVersions([]);
-      return;
-    }
-
-    try {
-      const payload = await listResumeVersions(id);
-      setVersions(payload.versions || []);
-    } catch {
-      setVersions([]);
-    }
-  };
+  useEffect(() => {
+    if (!resumeId) return undefined;
+    // Load stored resume detail without triggering heavy re-embedding on every navigation.
+    const frame = requestAnimationFrame(() => {
+      syncResumeDetail(resumeId, { refreshEmbeddings: false, silent: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [resumeId, syncResumeDetail]);
 
   const onUpload = async () => {
     if (!file) {
@@ -186,20 +185,51 @@ export default function ResmatPage() {
       subtitle="Upload, parse, and maintain your resume intelligence context. This module feeds the JD Analyzer route."
     >
       <div className="mp-grid two">
-        <article className="mp-card">
+        <article className="mp-card rounded-2xl p-6 bg-[#faf7f0]/85 backdrop-blur-xl border border-[#24231f]/12 shadow-sm">
           <h3>Resume Intake</h3>
-          <p>Supported formats: PDF and DOCX.</p>
-          <input type="file" accept=".pdf,.docx" onChange={(event) => setFile(event.target.files?.[0] || null)} />
+          <p>Supported formats: PDF and DOCX (Strict 1-page budget enforced).</p>
+          <div
+            style={{
+              border: "2px dashed rgba(36, 35, 31, 0.15)",
+              borderRadius: "14px",
+              padding: "16px",
+              background: "rgba(255, 255, 255, 0.65)",
+              backdropFilter: "blur(12px)",
+              WebkitBackdropFilter: "blur(12px)",
+              textAlign: "center",
+              marginBottom: "14px",
+            }}
+          >
+            <input
+              type="file"
+              accept=".pdf,.docx"
+              onChange={(event) => setFile(event.target.files?.[0] || null)}
+              style={{
+                display: "block",
+                width: "100%",
+                fontSize: "12px",
+                fontFamily: "var(--mono)",
+                cursor: "pointer",
+              }}
+            />
+            {file && (
+              <span style={{ display: "block", marginTop: "8px", fontSize: "11px", color: "var(--brand)", fontFamily: "var(--mono)" }}>
+                Selected: {file.name} ({(file.size / 1024).toFixed(1)} KB)
+              </span>
+            )}
+          </div>
           <button type="button" onClick={onUpload} disabled={!file || busy}>
             {busy ? "Analyzing..." : "Run ResMat.ai Analysis"}
           </button>
-          <p className="mp-muted">Extraction and embeddings refresh automatically when this resume context loads.</p>
-          <p className="mp-muted">Resume ID: {resumeId || "Not uploaded"}</p>
-          {info && <p className="mp-ok">{info}</p>}
-          {error && <p className="mp-error">{error}</p>}
+          <div style={{ marginTop: "14px", display: "flex", flexDirection: "column", gap: "4px" }}>
+            <p className="mp-muted" style={{ margin: 0 }}>Extraction and embeddings refresh automatically when this resume context loads.</p>
+            <p className="mp-muted" style={{ margin: 0 }}>Resume ID: {resumeId || "Not uploaded"}</p>
+          </div>
+          {info && <p className="mp-ok" style={{ marginTop: "10px" }}>{info}</p>}
+          {error && <p className="mp-error" style={{ marginTop: "10px" }}>{error}</p>}
         </article>
 
-        <article className="mp-card">
+        <article className="mp-card rounded-2xl p-6 bg-[#faf7f0]/85 backdrop-blur-xl border border-[#24231f]/12 shadow-sm">
           <h3>Version Timeline</h3>
           {versions.length === 0 && <p className="mp-muted">No versions available yet.</p>}
           <ul className="mp-list">
@@ -214,7 +244,7 @@ export default function ResmatPage() {
       </div>
 
       <div className="mp-grid two">
-        <article className="mp-card">
+        <article className="mp-card rounded-2xl p-6 bg-[#faf7f0]/85 backdrop-blur-xl border border-[#24231f]/12 shadow-sm">
           <h3>Extracted Skills</h3>
           {resumeSkills.length === 0 && <p className="mp-muted">Upload a resume to extract skills.</p>}
           <div className="mp-chip-row">
@@ -224,7 +254,7 @@ export default function ResmatPage() {
           </div>
         </article>
 
-        <article className="mp-card">
+        <article className="mp-card rounded-2xl p-6 bg-[#faf7f0]/85 backdrop-blur-xl border border-[#24231f]/12 shadow-sm">
           <h3>Skill Gap Map (Sub-module)</h3>
           <p>Latest match score: {formatPercent(jdContext?.match?.total_score)}</p>
           {latestSkillGap.length === 0 ? (
@@ -240,15 +270,52 @@ export default function ResmatPage() {
         </article>
       </div>
 
-      <article className="mp-card">
-        <h3>Resume Tailor Agent</h3>
-        <p className="mp-muted">Creates an ATS-friendly one-page version for the latest JD while preserving your resume structure.</p>
-        <button type="button" onClick={onTailorForCurrentJd} disabled={!resumeId || tailorBusy}>
-          {tailorBusy ? "Tailoring..." : "Tailor Resume For This"}
-        </button>
-        <button type="button" onClick={onDownloadApplyPackage} disabled={!resumeId || packageBusy}>
-          {packageBusy ? "Preparing package..." : "Download Apply-Ready Package"}
-        </button>
+      <article className="mp-card rounded-2xl p-6 bg-[#faf7f0]/85 backdrop-blur-xl border border-[#24231f]/12 shadow-sm">
+        <h3>1-Page ATS Resume Synthesizer</h3>
+        <p className="mp-muted">Compiles a strictly budgeted 1-page PDF tailored to the current JD keywords with zero page overflow.</p>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", margin: "14px 0" }}>
+          <button
+            type="button"
+            onClick={onTailorForCurrentJd}
+            disabled={!resumeId || tailorBusy}
+            style={{
+              padding: "10px 20px",
+              borderRadius: "10px",
+              background: "var(--brand)",
+              color: "#ffffff",
+              border: "none",
+              fontWeight: 700,
+              cursor: "pointer",
+              boxShadow: "0 2px 8px rgba(83, 105, 217, 0.25)",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+            }}
+          >
+            <span>✨</span>
+            <span>{tailorBusy ? "Synthesizing 1-Page PDF..." : "Synthesize 1-Page ATS Resume"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={onDownloadApplyPackage}
+            disabled={!resumeId || packageBusy}
+            style={{
+              padding: "10px 18px",
+              borderRadius: "10px",
+              background: "#24231f",
+              color: "#ffffff",
+              border: "none",
+              fontWeight: 600,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+            }}
+          >
+            <span>📦</span>
+            <span>{packageBusy ? "Preparing Package..." : "Download Apply-Ready Package (.zip)"}</span>
+          </button>
+        </div>
         {tailorResult && (
           <>
             <div className="mp-grid three">
@@ -261,7 +328,7 @@ export default function ResmatPage() {
         )}
       </article>
 
-      <article className="mp-card">
+      <article className="mp-card rounded-2xl p-6 bg-[#faf7f0]/85 backdrop-blur-xl border border-[#24231f]/12 shadow-sm">
         <h3>Parsed Summary (Raw)</h3>
         <pre className="mp-pre">{parsedSummary ? JSON.stringify(parsedSummary, null, 2) : "No parsed summary yet."}</pre>
       </article>

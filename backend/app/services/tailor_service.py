@@ -20,29 +20,62 @@ class ResumeTailorService:
         return [line.rstrip() for line in text.splitlines()]
 
     @staticmethod
-    def _inject_missing_keywords(resume_text: str, missing_keywords: list[str]) -> str:
-        if not missing_keywords:
-            return resume_text
+    def _keyword_exists_in_resume(resume_text: str, keyword: str) -> bool:
+        normalized_resume = resume_text.lower()
+        normalized_keyword = ResumeTailorService._normalize_spaces(keyword).lower()
+        if not normalized_keyword:
+            return False
+        if normalized_keyword in normalized_resume:
+            return True
 
+        keyword_parts = [part for part in re.split(r"[\s/,+-]+", normalized_keyword) if len(part) > 2]
+        return bool(keyword_parts) and all(part in normalized_resume for part in keyword_parts)
+
+    @classmethod
+    def _prepare_target_keywords(
+        cls,
+        resume_text: str,
+        missing_keywords: list[str],
+    ) -> tuple[list[str], list[str], list[str]]:
         seen: set[str] = set()
-        top_keywords: list[str] = []
+        target_keywords: list[str] = []
+        unsupported_keywords: list[str] = []
+
         for keyword in missing_keywords:
-            clean = ResumeTailorService._normalize_spaces(str(keyword))
+            clean = cls._normalize_spaces(str(keyword))
             key = clean.lower()
             if not clean or key in seen:
                 continue
             seen.add(key)
-            top_keywords.append(clean)
-            if len(top_keywords) >= 8:
+            target_keywords.append(clean)
+            if not cls._keyword_exists_in_resume(resume_text, clean):
+                unsupported_keywords.append(clean)
+            if len(target_keywords) >= 8:
                 break
 
+        supported_keywords = [keyword for keyword in target_keywords if keyword not in unsupported_keywords]
+        return target_keywords, supported_keywords, unsupported_keywords
+
+    @classmethod
+    def _inject_missing_keywords(
+        cls,
+        resume_text: str,
+        missing_keywords: list[str],
+    ) -> tuple[str, list[str], list[str], list[str]]:
+        if not missing_keywords:
+            return resume_text, [], [], []
+
+        target_keywords, supported_keywords, unsupported_keywords = cls._prepare_target_keywords(
+            resume_text,
+            missing_keywords,
+        )
         section_title = "\n\nTargeted Skills\n"
-        section_body = ", ".join(top_keywords)
+        section_body = "JD keywords to review: " + ", ".join(target_keywords)
 
         if "targeted skills" in resume_text.lower():
-            return resume_text
+            return resume_text, target_keywords, supported_keywords, unsupported_keywords
 
-        return f"{resume_text.strip()}{section_title}{section_body}\n"
+        return f"{resume_text.strip()}{section_title}{section_body}\n", target_keywords, supported_keywords, unsupported_keywords
 
     def _tighten_bullets(self, resume_text: str) -> str:
         lines = self._split_lines(resume_text)
@@ -53,11 +86,14 @@ class ResumeTailorService:
             if re.match(r"^(\-|\*|\u2022|\d+\.)\s+", stripped):
                 bullet_body = re.sub(r"^(\-|\*|\u2022|\d+\.)\s+", "", stripped)
                 bullet_body = self._normalize_spaces(bullet_body)
-                if len(bullet_body) > 0 and not re.search(r"\b\d+(?:\.\d+)?%?\b", bullet_body):
-                    bullet_body = f"{bullet_body}; delivered measurable impact in quality or speed"
+                if not bullet_body:
+                    continue
+                bullet_body = bullet_body[0].upper() + bullet_body[1:]
                 words = bullet_body.split()
                 if len(words) > self.MAX_BULLET_WORDS:
                     bullet_body = " ".join(words[: self.MAX_BULLET_WORDS]).rstrip(".,;") + "."
+                elif not bullet_body.endswith((".", "!", "?")):
+                    bullet_body = bullet_body.rstrip(";,") + "."
                 improved.append(f"- {bullet_body}")
             else:
                 improved.append(line)
@@ -65,7 +101,7 @@ class ResumeTailorService:
         return "\n".join(improved).strip()
 
     def _enforce_one_page(self, resume_text: str) -> str:
-        """Approximate a one-page ATS resume in plain text while preserving section order."""
+        """Approximate a one-page ATS resume in plain text while preserving section order and whole lines."""
         lines = [line.rstrip() for line in resume_text.splitlines()]
         compact: list[str] = []
         previous_blank = False
@@ -81,16 +117,14 @@ class ResumeTailorService:
         capped: list[str] = []
         for line in compact:
             words = line.split()
-            if line_count >= self.MAX_RESUME_LINES:
+            line_words = len(words)
+            if line_count + 1 > self.MAX_RESUME_LINES:
                 break
-            if word_count + len(words) > self.MAX_RESUME_WORDS:
-                remaining = self.MAX_RESUME_WORDS - word_count
-                if remaining > 6 and words:
-                    capped.append(" ".join(words[:remaining]).rstrip(".,;") + ".")
+            if word_count + line_words > self.MAX_RESUME_WORDS:
                 break
             capped.append(line)
             line_count += 1
-            word_count += len(words)
+            word_count += line_words
 
         return "\n".join(capped).strip()
 
@@ -126,20 +160,33 @@ class ResumeTailorService:
         include_cover_letter: bool = False,
     ) -> dict[str, Any]:
         tailored = resume_text
-        tailored = self._inject_missing_keywords(tailored, missing_keywords)
+        tailored, target_keywords, supported_keywords, unsupported_keywords = self._inject_missing_keywords(
+            tailored,
+            missing_keywords,
+        )
         tailored = self._tighten_bullets(tailored)
         tailored = self._enforce_one_page(tailored)
+        review_required = bool(unsupported_keywords)
 
         result: dict[str, Any] = {
             "tailored_resume_text": tailored,
             "change_summary": {
-                "keywords_added": missing_keywords[:8],
+                "keywords_added": target_keywords,
+                "supported_keywords_added": supported_keywords,
+                "unsupported_keywords_requiring_review": unsupported_keywords,
+                "review_required": review_required,
                 "bullet_improvements": True,
                 "ats_constraints": {
                     "one_page_limit": True,
                     "max_lines": self.MAX_RESUME_LINES,
                     "max_words": self.MAX_RESUME_WORDS,
                     "core_structure_preserved": True,
+                    "plain_text_ats_safe": True,
+                },
+                "guardrails": {
+                    "no_unverified_experience_claims": True,
+                    "unsupported_keywords_are_marked_for_review": True,
+                    "human_review_required_before_submission": review_required,
                 },
                 "controlled_style": "v1-deterministic",
             },

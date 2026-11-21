@@ -54,9 +54,11 @@ SKILL_CANDIDATE_BLOCKLIST = {
 }
 
 SECTION_ALIASES = {
-    "skills": ["skills", "technical skills", "tech stack"],
-    "experience": ["experience", "work experience", "employment"],
-    "projects": ["projects", "personal projects", "key projects"],
+    "skills": ["skills", "technical skills", "tech stack", "technical proficiencies", "core competencies"],
+    "experience": ["experience", "work experience", "professional experience", "employment", "internships", "internship"],
+    "projects": ["projects", "personal projects", "key projects", "academic projects"],
+    "education": ["education", "academic background", "academics"],
+    "certifications": ["certifications", "certification", "certificates", "licenses"],
 }
 
 GENERIC_SECTION_HEADERS = {
@@ -270,8 +272,12 @@ class ResumeParserService:
             "skills": self._extract_section(lines, "skills"),
             "experience": self._extract_section(lines, "experience"),
             "projects": self._extract_section(lines, "projects"),
+            "education": self._extract_section(lines, "education"),
+            "certifications": self._extract_section(lines, "certifications"),
         }
 
+        contact = self._extract_contact_info(normalized, lines)
+        candidate_name = self._extract_candidate_name(lines, contact)
         skills = self._extract_skills(normalized, sections["skills"])
         experience_years = self._estimate_experience_years(
             normalized,
@@ -279,12 +285,37 @@ class ResumeParserService:
             project_lines=sections["projects"],
         )
         projects_count = self._estimate_projects_count(sections["projects"], normalized)
+        warnings = self._build_parser_warnings(
+            text=normalized,
+            contact=contact,
+            candidate_name=candidate_name,
+            skills=skills,
+            sections=sections,
+        )
+        autofill_readiness = self._build_autofill_readiness(
+            contact=contact,
+            candidate_name=candidate_name,
+            sections=sections,
+        )
+        confidence = self._estimate_parser_confidence(
+            text=normalized,
+            contact=contact,
+            candidate_name=candidate_name,
+            skills=skills,
+            sections=sections,
+            warnings=warnings,
+        )
 
         return {
+            "candidate_name": candidate_name,
+            "contact": contact,
             "skills": skills,
             "experience_years_estimate": experience_years,
             "projects_count_estimate": projects_count,
             "sections": sections,
+            "parser_warnings": warnings,
+            "autofill_readiness": autofill_readiness,
+            "parser_confidence": confidence,
         }
 
     @staticmethod
@@ -314,6 +345,222 @@ class ResumeParserService:
                 result.append(line)
 
         return result
+
+    @staticmethod
+    def _extract_contact_info(text: str, lines: list[str]) -> dict[str, Any]:
+        email_match = re.search(r"\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b", text, flags=re.IGNORECASE)
+
+        urls = re.findall(r"https?://[^\s,)>\]]+|www\.[^\s,)>\]]+", text, flags=re.IGNORECASE)
+        link_candidates: list[str] = []
+        for line in lines[:20]:
+            if re.search(r"\b(linkedin|github|portfolio|kaggle)\b", line, flags=re.IGNORECASE):
+                link_candidates.append(line)
+
+        links: dict[str, Any] = {
+            "linkedin": None,
+            "github": None,
+            "portfolio": None,
+            "other": [],
+        }
+
+        for value in urls + link_candidates:
+            clean = value.strip(" .;,|")
+            lowered = clean.lower()
+            if "linkedin" in lowered and links["linkedin"] is None:
+                links["linkedin"] = clean
+            elif "github" in lowered and links["github"] is None:
+                links["github"] = clean
+            elif ("portfolio" in lowered or lowered.startswith(("http", "www."))) and links["portfolio"] is None:
+                links["portfolio"] = clean
+            elif clean not in links["other"]:
+                links["other"].append(clean)
+
+        return {
+            "email": email_match.group(0).lower() if email_match else None,
+            "phone": ResumeParserService._extract_phone(lines),
+            "location": ResumeParserService._extract_location(lines),
+            "links": links,
+        }
+
+    @staticmethod
+    def _extract_phone(lines: list[str]) -> str | None:
+        for line in lines[:12]:
+            if re.search(r"\b(19|20)\d{2}\s*[-/]\s*(19|20)\d{2}\b", line):
+                continue
+
+            candidates = re.findall(
+                r"(?:\+?\d{1,3}[\s.\-]?)?(?:\(?\d{2,5}\)?[\s.\-]?){2,4}",
+                line,
+            )
+            for candidate in candidates:
+                digits = re.sub(r"\D", "", candidate)
+                if 10 <= len(digits) <= 15:
+                    return ResumeParserService._normalize_phone(candidate)
+
+        return None
+
+    @staticmethod
+    def _normalize_phone(value: str) -> str:
+        compact = re.sub(r"[^\d+]", "", value)
+        if compact.startswith("+"):
+            return "+" + re.sub(r"\D", "", compact[1:])
+        return re.sub(r"\D", "", compact)
+
+    @staticmethod
+    def _extract_location(lines: list[str]) -> str | None:
+        location_pattern = re.compile(
+            r"\b(?:location|based in|address)\s*[:\-]\s*(?P<location>[A-Za-z][A-Za-z\s,.-]{2,80})",
+            flags=re.IGNORECASE,
+        )
+        city_country_pattern = re.compile(
+            r"\b[A-Za-z][A-Za-z\s.-]{2,40},\s*(?:India|USA|United States|Canada|UK|United Kingdom|Australia)\b",
+            flags=re.IGNORECASE,
+        )
+
+        for line in lines[:12]:
+            if re.search(r"@|https?://|www\.|linkedin|github", line, flags=re.IGNORECASE):
+                continue
+            if ResumeParserService._extract_phone([line]):
+                continue
+
+            labeled = location_pattern.search(line)
+            if labeled:
+                return ResumeParserService._clean_location(labeled.group("location"))
+
+            city_country = city_country_pattern.search(line)
+            if city_country:
+                return ResumeParserService._clean_location(city_country.group(0))
+
+        return None
+
+    @staticmethod
+    def _clean_location(value: str) -> str:
+        return re.sub(r"\s+", " ", value).strip(" .,-|")
+
+    @staticmethod
+    def _extract_candidate_name(lines: list[str], contact: dict[str, Any]) -> str | None:
+        email = contact.get("email")
+        phone = contact.get("phone")
+
+        for line in lines[:8]:
+            clean = re.sub(r"\s+", " ", line).strip(" -|")
+            if not clean:
+                continue
+            lowered = clean.lower().strip(":")
+            if lowered in GENERIC_SECTION_HEADERS or lowered in {alias for aliases in SECTION_ALIASES.values() for alias in aliases}:
+                break
+            if email and email in lowered:
+                continue
+            if phone and re.sub(r"\D", "", phone) in re.sub(r"\D", "", clean):
+                continue
+            if re.search(r"@|https?://|www\.|linkedin|github|portfolio", clean, flags=re.IGNORECASE):
+                continue
+            if "," in clean or re.search(r"\b(sql|python|java|react|docker|fastapi)\b", lowered):
+                continue
+            words = clean.split()
+            if 1 <= len(words) <= 5 and all(re.search(r"[A-Za-z]", word) for word in words):
+                return clean
+
+        return None
+
+    @staticmethod
+    def _build_parser_warnings(
+        text: str,
+        contact: dict[str, Any],
+        candidate_name: str | None,
+        skills: list[str],
+        sections: dict[str, list[str]],
+    ) -> list[str]:
+        warnings: list[str] = []
+
+        if len(text.strip()) < 250:
+            warnings.append("resume_text_short")
+        if not candidate_name:
+            warnings.append("candidate_name_not_found")
+        if not contact.get("email"):
+            warnings.append("email_not_found")
+        if not contact.get("phone"):
+            warnings.append("phone_not_found")
+        if not contact.get("location"):
+            warnings.append("location_not_found")
+        if not skills:
+            warnings.append("skills_not_found")
+        for section_name in ("experience", "projects", "education"):
+            if not sections.get(section_name):
+                warnings.append(f"{section_name}_section_not_found")
+
+        return warnings
+
+    @staticmethod
+    def _build_autofill_readiness(
+        contact: dict[str, Any],
+        candidate_name: str | None,
+        sections: dict[str, list[str]],
+    ) -> dict[str, Any]:
+        missing_required: list[str] = []
+        for field_name, value in (
+            ("candidate_name", candidate_name),
+            ("email", contact.get("email")),
+            ("phone", contact.get("phone")),
+        ):
+            if not value:
+                missing_required.append(field_name)
+
+        missing_recommended: list[str] = []
+        for field_name, value in (
+            ("location", contact.get("location")),
+            ("education", sections.get("education")),
+        ):
+            if not value:
+                missing_recommended.append(field_name)
+
+        return {
+            "ready": not missing_required,
+            "review_required": True,
+            "missing_required_fields": missing_required,
+            "missing_recommended_fields": missing_recommended,
+        }
+
+    @staticmethod
+    def _estimate_parser_confidence(
+        text: str,
+        contact: dict[str, Any],
+        candidate_name: str | None,
+        skills: list[str],
+        sections: dict[str, list[str]],
+        warnings: list[str],
+    ) -> dict[str, Any]:
+        score = 0.25
+        if len(text.strip()) >= 500:
+            score += 0.15
+        if candidate_name:
+            score += 0.08
+        if contact.get("email"):
+            score += 0.10
+        if contact.get("phone"):
+            score += 0.10
+        if contact.get("location"):
+            score += 0.05
+        if len(skills) >= 3:
+            score += 0.15
+        if sections.get("education"):
+            score += 0.10
+        if sections.get("experience") or sections.get("projects"):
+            score += 0.15
+        score -= min(0.25, len(warnings) * 0.04)
+        score = round(max(0.0, min(1.0, score)), 2)
+
+        if score >= 0.75:
+            label = "high"
+        elif score >= 0.45:
+            label = "medium"
+        else:
+            label = "low"
+
+        return {
+            "score": score,
+            "label": label,
+        }
 
     def _extract_skills(self, text: str, skill_lines: list[str]) -> list[str]:
         lowered = text.lower()

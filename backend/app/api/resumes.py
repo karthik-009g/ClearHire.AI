@@ -9,8 +9,9 @@ from datetime import datetime, timedelta
 from hashlib import sha256
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.api.schemas.resume import (
     CleanupResponse,
@@ -27,8 +28,11 @@ from app.api.schemas.resume import (
 )
 from app.database import get_db
 from app.models import JobDescription, MatchResult, Resume, ResumeVersion, User
+from pydantic import BaseModel
+
 from app.services.matcher_service import ResumeMatcherService
 from app.services.parser_service import ResumeParserService
+from app.services.pdf_generator_service import PdfGeneratorService
 from app.services.rag_service import ReconciledRAGService
 from app.services.retention_service import cleanup_expired_resumes
 from app.services.storage import get_storage_provider
@@ -45,10 +49,23 @@ parser_service = ResumeParserService(spacy_model=settings.spacy_model)
 matcher_service = ResumeMatcherService(
     embedding_model_name=settings.embedding_model_name,
     embedding_dimensions=settings.embedding_dimensions,
+    load_embedding_model=settings.embedding_load_local_model,
 )
 rag_service = ReconciledRAGService(matcher_service=matcher_service)
 storage = get_storage_provider(settings.storage_root)
 tailor_service = ResumeTailorService()
+pdf_generator = PdfGeneratorService()
+
+
+def _require_current_user(current_user: User | None) -> None:
+    if settings.auth_enabled and current_user is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+
+def _ensure_resume_owner(resume: Resume, current_user: User | None) -> None:
+    _require_current_user(current_user)
+    if settings.auth_enabled and current_user is not None and resume.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not allowed for this resume")
 
 
 def _embedding_needs_refresh(vector: list[float] | None) -> bool:
@@ -63,8 +80,7 @@ def _create_tailored_version(
     resume = db.query(Resume).filter(Resume.id == request.resume_id).first()
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
-    if settings.auth_enabled and current_user and resume.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not allowed for this resume")
+    _ensure_resume_owner(resume, current_user)
 
     source_version = (
         db.query(ResumeVersion)
@@ -159,6 +175,7 @@ async def upload_resume(
     db: Session = Depends(get_db),
     current_user: User | None = Depends(get_current_user_optional),
 ):
+    _require_current_user(current_user)
     filename = file.filename or "resume"
     content = await file.read()
     try:
@@ -174,18 +191,20 @@ async def upload_resume(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     try:
-        resume_text = parser_service.extract_text(content, extension)
+        resume_text = await run_in_threadpool(parser_service.extract_text, content, extension)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Failed to parse resume: {exc}") from exc
 
     if not resume_text.strip():
         raise HTTPException(status_code=400, detail="Extracted resume text is empty")
 
-    parsed_summary = parser_service.parse_resume(resume_text)
-    stored_path = storage.save_file(content, filename)
+    parsed_summary = await run_in_threadpool(parser_service.parse_resume, resume_text)
+    stored_path = await run_in_threadpool(storage.save_file, content, filename)
     expiry = datetime.utcnow() + timedelta(days=settings.resume_retention_days)
-    resume_context = matcher_service.build_resume_context(resume_text, parsed_summary=parsed_summary)
-    resume_embedding = matcher_service.embed_text(resume_context)
+    resume_context = await run_in_threadpool(
+        matcher_service.build_resume_context, resume_text, parsed_summary=parsed_summary
+    )
+    resume_embedding = await run_in_threadpool(matcher_service.embed_text, resume_context)
 
     resume = Resume(
         user_id=current_user.id if current_user else None,
@@ -195,19 +214,23 @@ async def upload_resume(
         parsed_summary=parsed_summary,
         expires_at=expiry,
     )
-    db.add(resume)
-    db.flush()
 
-    version = ResumeVersion(
-        resume_id=resume.id,
-        version_no=1,
-        content_text=resume_text,
-        embedding=resume_embedding,
-        embedding_vector=resume_embedding,
-    )
-    db.add(version)
-    db.commit()
-    db.refresh(resume)
+    def _persist_uploaded_resume(session: Session) -> None:
+        session.add(resume)
+        session.flush()
+
+        version = ResumeVersion(
+            resume_id=resume.id,
+            version_no=1,
+            content_text=resume_text,
+            embedding=resume_embedding,
+            embedding_vector=resume_embedding,
+        )
+        session.add(version)
+        session.commit()
+        session.refresh(resume)
+
+    await run_in_threadpool(_persist_uploaded_resume, db)
 
     if current_user and background_tasks is not None:
         background_tasks.add_task(run_on_upload, current_user.id)
@@ -230,8 +253,7 @@ def match_resume(
     resume = db.query(Resume).filter(Resume.id == request.resume_id).first()
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
-    if settings.auth_enabled and current_user and resume.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not allowed for this resume")
+    _ensure_resume_owner(resume, current_user)
 
     version = (
         db.query(ResumeVersion)
@@ -257,6 +279,7 @@ def match_resume(
         jd_text=request.jd_text,
         parser=parser_service,
         matcher=matcher_service,
+        parsed_summary=resume.parsed_summary,
     )
     match_data = flow_output["match"]
     jd_embedding = matcher_service.embed_text(request.jd_text)
@@ -304,8 +327,7 @@ def match_resume_reconciled(
     resume = db.query(Resume).filter(Resume.id == request.resume_id).first()
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
-    if settings.auth_enabled and current_user and resume.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not allowed for this resume")
+    _ensure_resume_owner(resume, current_user)
 
     version = (
         db.query(ResumeVersion)
@@ -405,8 +427,7 @@ def get_resume_detail(
     resume = db.query(Resume).filter(Resume.id == resume_id).first()
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
-    if settings.auth_enabled and current_user and resume.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not allowed for this resume")
+    _ensure_resume_owner(resume, current_user)
 
     latest_version = (
         db.query(ResumeVersion)
@@ -434,8 +455,7 @@ def list_resume_versions(
     resume = db.query(Resume).filter(Resume.id == resume_id).first()
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
-    if settings.auth_enabled and current_user and resume.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not allowed for this resume")
+    _ensure_resume_owner(resume, current_user)
 
     versions = (
         db.query(ResumeVersion)
@@ -459,8 +479,7 @@ def reembed_resume_versions(
     resume = db.query(Resume).filter(Resume.id == resume_id).first()
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
-    if settings.auth_enabled and current_user and resume.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not allowed for this resume")
+    _ensure_resume_owner(resume, current_user)
 
     versions = (
         db.query(ResumeVersion)
@@ -497,9 +516,44 @@ def reembed_resume_versions(
     }
 
 
+@router.get("/{resume_id}/download")
+def download_resume_file(
+    resume_id: str,
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional),
+):
+    resume = db.query(Resume).filter(Resume.id == resume_id).first()
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    _ensure_resume_owner(resume, current_user)
+    if not resume.stored_path:
+        raise HTTPException(status_code=404, detail="No stored file found for this resume")
+
+    try:
+        file_bytes = storage.get_file(resume.stored_path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Stored file could not be found on storage provider")
+
+    filename = resume.original_filename or f"resume_{resume_id}.pdf"
+    media_type = "application/pdf" if filename.lower().endswith(".pdf") else "application/octet-stream"
+    return Response(
+        content=file_bytes,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.post("/cleanup-expired", response_model=CleanupResponse)
-def cleanup_expired(db: Session = Depends(get_db)):
-    deleted_records, deleted_files = cleanup_expired_resumes(db, storage)
+def cleanup_expired(
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional),
+):
+    _require_current_user(current_user)
+    deleted_records, deleted_files = cleanup_expired_resumes(
+        db,
+        storage,
+        user_id=current_user.id if settings.auth_enabled and current_user else None,
+    )
     return CleanupResponse(deleted_records=deleted_records, deleted_files=deleted_files)
 
 
@@ -577,3 +631,69 @@ def tailor_resume_package(
     buffer.seek(0)
     headers = {"Content-Disposition": f'attachment; filename="{package_filename}"'}
     return StreamingResponse(buffer, media_type="application/zip", headers=headers)
+
+
+class ExportPdfRequest(BaseModel):
+    resume_text: str
+    candidate_name: str | None = None
+    contact_line: str | None = None
+
+
+@router.post("/export-pdf")
+def export_resume_pdf(request: ExportPdfRequest):
+    pdf_bytes = pdf_generator.generate_ats_pdf(
+        resume_text=request.resume_text,
+        candidate_name=request.candidate_name or "",
+        contact_line=request.contact_line or "",
+    )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="ats_tailored_resume.pdf"'},
+    )
+
+
+@router.get("/{resume_id}/versions/{version_no}/export-pdf")
+def export_version_pdf(
+    resume_id: str,
+    version_no: int,
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional),
+):
+    resume = db.query(Resume).filter(Resume.id == resume_id).first()
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    _ensure_resume_owner(resume, current_user)
+
+    version = (
+        db.query(ResumeVersion)
+        .filter(ResumeVersion.resume_id == resume.id, ResumeVersion.version_no == version_no)
+        .first()
+    )
+    if not version:
+        raise HTTPException(status_code=404, detail="Resume version not found")
+
+    candidate_name = ""
+    contact_info_parts: list[str] = []
+    if resume.parsed_summary:
+        candidate_name = resume.parsed_summary.get("name") or ""
+        contact = resume.parsed_summary.get("contact") or {}
+        if contact.get("email"):
+            contact_info_parts.append(f"Email: {contact['email']}")
+        if contact.get("phone"):
+            contact_info_parts.append(f"Phone: {contact['phone']}")
+        if contact.get("linkedin"):
+            contact_info_parts.append(contact["linkedin"])
+
+    pdf_bytes = pdf_generator.generate_ats_pdf(
+        resume_text=version.content_text,
+        candidate_name=candidate_name,
+        contact_line=" | ".join(contact_info_parts),
+    )
+
+    filename = f"resume_{resume_id}_v{version_no}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )

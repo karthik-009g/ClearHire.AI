@@ -2,8 +2,7 @@
 Database configuration and initialization
 """
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
 from app.utils.config import settings
 
 # Database engine
@@ -11,8 +10,9 @@ engine = create_engine(
     settings.database_url,
     echo=settings.debug,
     pool_pre_ping=True,
-    pool_size=20,
-    max_overflow=0,
+    pool_size=60,
+    max_overflow=40,
+    pool_timeout=10.0,
 )
 
 # Session factory
