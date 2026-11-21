@@ -21,11 +21,11 @@ Ship a low-cost production-ready V1 of an agentic job application assistant with
    - embedding similarity score
    - combined weighted score and missing keyword set
 6. Tailoring engine creates controlled resume edits and optional cover letter.
-7. System stores resume version and generated apply-ready package.
+7. System stores resume version and generates an apply-ready package for download.
 8. Job tracker updates status (pending/applied).
 
 ## Data Model (V1)
-- users (optional in V1): id, email, created_at.
+- users: id, email, created_at.
 - resumes: id, user_id, original_file_path, parsed_summary_json, created_at, expires_at.
 - resume_versions: id, resume_id, version_no, content_json_or_text, created_at.
 - job_descriptions: id, source, title, company, jd_text, created_at.
@@ -37,7 +37,7 @@ Ship a low-cost production-ready V1 of an agentic job application assistant with
 - File validation and hard size limit.
 - Basic request validation and sanitization.
 - Do not log raw resume text or full JD payloads.
-- Add retention cleanup for files/data older than 30 days.
+- Add retention cleanup for files/data older than 15 days.
 
 ## Performance Targets
 - Parse + score target under 5 seconds for typical resumes.
