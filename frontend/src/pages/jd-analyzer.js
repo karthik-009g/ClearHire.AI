@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/router";
 import ModuleLayout from "../components/ModuleLayout";
 import { scrapeJobs } from "../api/jobs";
@@ -34,27 +34,30 @@ function buildSearchKeywords(jdText, roleTitle, companyName) {
 
 export default function JdAnalyzerPage() {
   const router = useRouter();
-  const [resmatContext, setResmatContextState] = useState(null);
-  const [roleTitle, setRoleTitle] = useState("AI Engineer");
-  const [companyName, setCompanyName] = useState("");
-  const [jdText, setJdText] = useState("");
+  const [initialContexts] = useState(() => ({ resume: getResmatContext(), job: getJdContext() }));
+  const [resmatContext] = useState(initialContexts.resume);
+  const [roleTitle, setRoleTitle] = useState(initialContexts.job?.roleTitle || "AI Engineer");
+  const [companyName, setCompanyName] = useState(initialContexts.job?.companyName || "");
+  const [jdText, setJdText] = useState(initialContexts.job?.jdText || "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
-  const [analysis, setAnalysis] = useState(null);
+  const [analysis, setAnalysis] = useState(initialContexts.job);
 
-  useEffect(() => {
-    const resumeContext = getResmatContext();
-    setResmatContextState(resumeContext);
-
-    const existing = getJdContext();
-    if (existing) {
-      setAnalysis(existing);
-      setRoleTitle(existing.roleTitle || "AI Engineer");
-      setCompanyName(existing.companyName || "");
-      setJdText(existing.jdText || "");
-    }
-  }, []);
+  const handleLoadSampleJd = () => {
+    setRoleTitle("Senior Backend / AI Systems Engineer");
+    setCompanyName("Razorpay");
+    setJdText(
+      "We are looking for a Senior Backend & AI Systems Engineer to build high-concurrency payment and merchant intelligence pipelines.\n\n" +
+      "Key Requirements:\n" +
+      "- 4+ years designing production microservices in Python, FastAPI, and Go.\n" +
+      "- Experience designing low-latency REST and gRPC APIs handling 100K+ RPM.\n" +
+      "- Hands-on expertise with PostgreSQL, Redis cache invalidation, and Apache Kafka.\n" +
+      "- Familiarity with LLM orchestration, LangChain/LlamaIndex, vector databases (Pinecone/Milvus), and RAG pipelines.\n" +
+      "- Docker, Kubernetes, AWS/GCP, and CI/CD automation."
+    );
+    setInfo("Sample Razorpay AI Systems JD loaded. Ready to analyze.");
+  };
 
   const resumeSkills = useMemo(() => normalizeSkills(resmatContext?.parsedSummary?.skills || []), [resmatContext]);
 
@@ -129,7 +132,7 @@ export default function JdAnalyzerPage() {
       title="JD Analyzer"
       subtitle="Input JD and company, score against resume, generate target tech stack, and produce skill gap analytics."
     >
-      <article className="mp-card">
+      <article className="mp-card rounded-2xl p-6 bg-[#faf7f0]/85 backdrop-blur-xl border border-[#24231f]/12 shadow-sm hover:border-[#24231f]/20 transition-all">
         <div className="mp-grid three">
           <label>
             Target role
@@ -145,36 +148,103 @@ export default function JdAnalyzerPage() {
           </label>
         </div>
 
-        <label>
-          Job description
-          <textarea
-            rows={9}
-            value={jdText}
-            onChange={(event) => setJdText(event.target.value)}
-            placeholder="Paste complete JD text here"
-          />
-        </label>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", marginTop: "12px" }}>
+          <label style={{ margin: 0, fontWeight: 600 }}>Job description</label>
+          <button
+            type="button"
+            onClick={handleLoadSampleJd}
+            style={{ fontSize: "11px", padding: "3px 10px", borderRadius: "999px", background: "rgba(83, 105, 217, 0.1)", color: "#5369d9", border: "1px solid rgba(83, 105, 217, 0.25)", cursor: "pointer", fontWeight: 600 }}
+          >
+            ⚡ Load Sample AI Systems JD
+          </button>
+        </div>
 
-        <button type="button" onClick={onAnalyze} disabled={busy}>
-          {busy ? "Analyzing..." : "Run JD Analyzer"}
-        </button>
+        <textarea
+          rows={9}
+          value={jdText}
+          onChange={(event) => setJdText(event.target.value)}
+          placeholder="Paste complete JD text here"
+        />
+
+        <div style={{ display: "flex", gap: "10px", alignItems: "center", marginTop: "12px", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={onAnalyze}
+            disabled={busy}
+            style={{
+              padding: "10px 22px",
+              borderRadius: "10px",
+              background: "var(--brand)",
+              color: "#ffffff",
+              border: "none",
+              fontWeight: 700,
+              cursor: "pointer",
+              boxShadow: "0 2px 8px rgba(83, 105, 217, 0.25)",
+            }}
+          >
+            {busy ? "Analyzing Match & Market..." : "🚀 Run JD Analyzer"}
+          </button>
+
+          {analysis && (
+            <>
+              <button
+                type="button"
+                onClick={() => router.push("/resmat-ai")}
+                style={{
+                  padding: "10px 18px",
+                  borderRadius: "10px",
+                  background: "#24231f",
+                  color: "#ffffff",
+                  border: "none",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+              >
+                <span>📄</span>
+                <span>Tailor 1-Page Resume ➔</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push("/job-hunter")}
+                style={{
+                  padding: "10px 18px",
+                  borderRadius: "10px",
+                  background: "rgba(255, 255, 255, 0.8)",
+                  color: "#24231f",
+                  border: "1px solid rgba(36, 35, 31, 0.15)",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+              >
+                <span>🎯</span>
+                <span>Scan Matching Requisitions ➔</span>
+              </button>
+            </>
+          )}
+        </div>
         {info && <p className="mp-ok">{info}</p>}
         {error && <p className="mp-error">{error}</p>}
       </article>
 
       <div className="mp-grid three">
-        <article className="mp-card">
+        <article className="mp-card rounded-2xl p-6 bg-[#faf7f0]/85 backdrop-blur-xl border border-[#24231f]/12 shadow-sm hover:border-[#24231f]/20 transition-all">
           <h3>Match Score</h3>
           <p className="mp-metric">{formatPercent(analysis?.match?.total_score)}</p>
           <p>Keyword: {formatPercent(analysis?.match?.keyword_score)}</p>
           <p>Embedding: {formatPercent(analysis?.match?.embedding_score)}</p>
         </article>
-        <article className="mp-card">
+        <article className="mp-card rounded-2xl p-6 bg-[#faf7f0]/85 backdrop-blur-xl border border-[#24231f]/12 shadow-sm hover:border-[#24231f]/20 transition-all">
           <h3>Market Signals</h3>
           <p className="mp-metric">{analysis?.scrapedCount ?? 0}</p>
           <p>LinkedIn + Naukri scan results integrated.</p>
         </article>
-        <article className="mp-card">
+        <article className="mp-card rounded-2xl p-6 bg-[#faf7f0]/85 backdrop-blur-xl border border-[#24231f]/12 shadow-sm hover:border-[#24231f]/20 transition-all">
           <h3>Skill Gap Count</h3>
           <p className="mp-metric">{analysis?.skillGap?.length ?? 0}</p>
           <p>Auto-compared against your resume skills.</p>
@@ -182,7 +252,7 @@ export default function JdAnalyzerPage() {
       </div>
 
       <div className="mp-grid two">
-        <article className="mp-card">
+        <article className="mp-card rounded-2xl p-6 bg-[#faf7f0]/85 backdrop-blur-xl border border-[#24231f]/12 shadow-sm hover:border-[#24231f]/20 transition-all">
           <h3>AI Generated Target Stack</h3>
           <div className="mp-chip-row">
             {(analysis?.generatedStack || []).map((skill) => (
@@ -192,7 +262,7 @@ export default function JdAnalyzerPage() {
           </div>
         </article>
 
-        <article className="mp-card">
+        <article className="mp-card rounded-2xl p-6 bg-[#faf7f0]/85 backdrop-blur-xl border border-[#24231f]/12 shadow-sm hover:border-[#24231f]/20 transition-all">
           <h3>Skill Gap Map</h3>
           <div className="mp-chip-row">
             {(analysis?.skillGap || []).map((skill) => (
@@ -203,7 +273,7 @@ export default function JdAnalyzerPage() {
         </article>
       </div>
 
-      <article className="mp-card">
+      <article className="mp-card rounded-2xl p-6 bg-[#faf7f0]/85 backdrop-blur-xl border border-[#24231f]/12 shadow-sm hover:border-[#24231f]/20 transition-all">
         <h3>Top Market Matches</h3>
         <ul className="mp-list">
           {(analysis?.marketSignals || []).map((job) => (

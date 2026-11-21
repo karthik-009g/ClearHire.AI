@@ -30,10 +30,6 @@ class ScrapedJob:
 
 
 SOURCES: dict[str, dict[str, str]] = {
-    "naukri": {
-        "company": "Naukri",
-        "url": "https://www.naukri.com/software-developer-jobs-in-india",
-    },
     "linkedin": {
         "company": "LinkedIn",
         "url": "https://www.linkedin.com/jobs/search/?keywords=software%20engineer&location=India",
@@ -142,6 +138,22 @@ class JobScraperService:
             }
         )
 
+    def _fetch_html_rendered(self, url: str) -> str | None:
+        """Headless browser rendering fallback for SPA job portals."""
+        try:
+            from playwright.sync_api import sync_playwright
+
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
+                page = browser.new_page()
+                page.set_default_timeout(10000)
+                page.goto(url, wait_until="domcontentloaded")
+                content = page.content()
+                browser.close()
+                return content
+        except Exception:
+            return None
+
     def _get_with_retry(self, url: str):
         attempts = max(1, int(settings.max_retries))
         for _ in range(attempts):
@@ -151,28 +163,14 @@ class JobScraperService:
                 return response
             except Exception:
                 continue
+
+        rendered = self._fetch_html_rendered(url)
+        if rendered:
+            class _RenderedResponse:
+                def __init__(self, text: str):
+                    self.text = text
+            return _RenderedResponse(rendered)
         return None
-
-    def _linkedin_search_urls(self, keywords: list[str]) -> list[str]:
-        keyword_query = " ".join([keyword.strip() for keyword in keywords if keyword.strip()][:4])
-        if not keyword_query:
-            keyword_query = "software engineer"
-
-        pages = max(1, min(6, int(settings.scrape_max_pages_per_source)))
-        urls: list[str] = []
-        for page_idx in range(pages):
-            start = page_idx * 25
-            query = urlencode(
-                {
-                    "keywords": keyword_query,
-                    "location": "India",
-                    "start": start,
-                }
-            )
-            urls.append(f"https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?{query}")
-
-        urls.append(SOURCES["linkedin"]["url"])
-        return list(dict.fromkeys(urls))
 
     def scrape_sources(
         self,
@@ -194,8 +192,21 @@ class JobScraperService:
         max_post_age_hours: int | None,
     ) -> list[ScrapedJob]:
         if source_key == "linkedin":
-            return self._scrape_linkedin_source(source_key, keywords, max_post_age_hours=max_post_age_hours)
+            return self._scrape_linkedin_source(source_key, keywords, max_post_age_hours)
         return self._scrape_generic_source(source_key, keywords, max_post_age_hours=max_post_age_hours)
+
+    def _linkedin_search_urls(self, keywords: list[str]) -> list[str]:
+        keyword_query = " ".join(keyword.strip() for keyword in keywords if keyword.strip())
+        if not keyword_query:
+            keyword_query = "software engineer"
+
+        pages = max(1, min(6, int(settings.scrape_max_pages_per_source)))
+        urls = []
+        for page_index in range(pages):
+            query = urlencode({"keywords": keyword_query, "location": "India", "start": page_index * 25})
+            urls.append(f"https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?{query}")
+        urls.append(SOURCES["linkedin"]["url"])
+        return list(dict.fromkeys(urls))
 
     def _scrape_linkedin_source(
         self,
@@ -216,39 +227,41 @@ class JobScraperService:
                 if not href:
                     continue
 
-                absolute_url = self._canonicalize_url(source_key, urljoin(search_url, href))
+                job_url = self._canonicalize_url(source_key, urljoin(search_url, href))
                 container = anchor.find_parent("li") or anchor.find_parent("div") or anchor.parent
-
-                title = (
-                    self._select_first_text(container, ("h3.base-search-card__title", "h3", "span.screen-reader-text"))
-                    or self._safe_text(anchor)
-                )
-                context_snippet = self._context_snippet(container)
+                title = self._select_first_text(
+                    container,
+                    ("h3.base-search-card__title", "h3", "span.screen-reader-text"),
+                ) or self._safe_text(anchor)
                 if not self._looks_like_job_title(title):
                     continue
+
+                context_snippet = self._context_snippet(container)
                 if not self._passes_keyword_filter(title, keywords, context_snippet):
                     continue
 
-                company_name = self._select_first_text(
+                snippet_lower = (context_snippet or "").lower()
+                if any(x in snippet_lower for x in ("no longer accepting applications", "job is closed", "expired", "closed")):
+                    continue
+                if "expired_jd_redirect" in job_url:
+                    continue
+
+                company = self._select_first_text(
                     container,
                     (
                         "h4.base-search-card__subtitle a",
                         "h4.base-search-card__subtitle",
                         "a.hidden-nested-link",
                     ),
-                )
-                if not company_name:
-                    company_name = self._extract_company_from_linkedin_url(absolute_url) or source_meta["company"]
-
+                ) or self._extract_company_from_linkedin_url(job_url) or source_meta["company"]
                 location = self._select_first_text(
                     container,
-                    (
-                        "span.job-search-card__location",
-                        "span.base-search-card__metadata",
-                    ),
+                    ("span.job-search-card__location", "span.base-search-card__metadata"),
                 ) or "India"
-
-                time_tag = self._select_first_tag(container, ("time", "span.job-search-card__listdate", "span.job-search-card__listdate--new"))
+                time_tag = self._select_first_tag(
+                    container,
+                    ("time", "span.job-search-card__listdate", "span.job-search-card__listdate--new"),
+                )
                 posted_at, posted_text = self._parse_posted_datetime(time_tag, container)
                 if not self._is_recent(posted_at, max_post_age_hours):
                     continue
@@ -256,20 +269,18 @@ class JobScraperService:
                 jobs.append(
                     ScrapedJob(
                         source=source_key,
-                        company=company_name[:255],
+                        company=company[:255],
                         title=title[:255],
-                        url=absolute_url[:1024],
-                        location=(location or "India")[:255],
+                        url=job_url[:1024],
+                        location=location[:255],
                         description=context_snippet,
                         scraped_at=datetime.utcnow(),
                         posted_at=posted_at,
                         posted_text=posted_text,
                     )
                 )
-
                 if len(jobs) >= settings.scrape_max_jobs_per_source:
                     break
-
             if len(jobs) >= settings.scrape_max_jobs_per_source:
                 break
 
@@ -315,14 +326,10 @@ class JobScraperService:
             if not self._is_recent(posted_at, max_post_age_hours):
                 continue
 
-            company_name = company
-            if source_key == "linkedin":
-                company_name = self._extract_company_from_linkedin_url(absolute_url) or company
-
             jobs.append(
                 ScrapedJob(
                     source=source_key,
-                    company=company_name[:255],
+                    company=company[:255],
                     title=title[:255],
                     url=absolute_url[:1024],
                     location="India",
@@ -549,18 +556,6 @@ class JobScraperService:
 
         return None
 
-    def _extract_company_from_linkedin_url(self, absolute_url: str) -> str | None:
-        path = urlparse(absolute_url).path
-        match = re.search(r"/jobs/view/[^/]*?-at-([a-z0-9\-]+)-\d+", path, flags=re.IGNORECASE)
-        if not match:
-            return None
-
-        company_slug = match.group(1).strip("-")
-        if not company_slug:
-            return None
-
-        return self._title_case_company(company_slug.replace("-", " "))
-
     @staticmethod
     def _title_case_company(raw: str) -> str:
         words = [word for word in raw.split() if word]
@@ -574,3 +569,13 @@ class JobScraperService:
                 continue
             normalized.append(word.capitalize())
         return " ".join(normalized)
+
+    def _extract_company_from_linkedin_url(self, absolute_url: str) -> str | None:
+        path = urlparse(absolute_url).path
+        match = re.search(r"/jobs/view/[^/]*?-at-([a-z0-9-]+)-\d+", path, flags=re.IGNORECASE)
+        if not match:
+            return None
+        company_slug = match.group(1).strip("-")
+        if not company_slug:
+            return None
+        return self._title_case_company(company_slug.replace("-", " "))

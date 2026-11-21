@@ -1,3 +1,29 @@
+# Scratch test screenshots and debug images
+*.png
+ch0*.png
+test_*.png
+current.png
+stage01_fixed.png
+!frontend/public/**/*.png
+
+# Browser automation temp & testing
+.chrome-temp/
+.chrome-temp
+
+# Benchmark & stress test artifacts
+benchmark_results.json
+docs/stress_test_results.json
+stress_test_results.json
+
+# Git worktrees
+.worktrees/
+.worktree/
+
+# Local backups and documents
+_local_backups/
+*.docx
+HANDOFF_CONTEXT.md
+
 # Comprehensive project gitignore
 
 # Python
@@ -28,6 +54,14 @@ venv/
 ENV/
 env/
 .venv
+.venv/
+.pyc
+.pytest_cache/
+
+# Ignore generated application and frontend build state
+.next/
+.run/
+node_modules/
 
 # Virtual environments
 venv/
@@ -35,6 +69,7 @@ venv/
 env/
 .env
 .env.local
+.env.*
 .env.*.local
 
 # IDEs
@@ -73,7 +108,7 @@ build/
 *.zip
 
 # Docker
-.dockerignore
+# Keep .dockerignore tracked so container build context is reproducible.
 docker-compose.override.yml
 
 # Logs
@@ -89,8 +124,6 @@ postgres_data/
 
 # Secrets & credentials
 .aws/
-.env
-.env.*
 secrets.json
 credentials.json
 .api_keys
@@ -103,6 +136,27 @@ credentials.json
 *.swp
 tmp/
 temp/
+.chrome-temp/
+.chrome-temp
+.worktrees/
+.worktrees
+_local_backups/
+_local_backups
+HANDOFF_CONTEXT.md
+*.docx
+
+# Test screenshots and ephemeral visual captures
+*.png
+ch0*.png
+test_*.png
+current.png
+stage01_fixed.png
+!**/public/**/*.png
+
+# Benchmark and stress test outputs
+benchmark_results.json
+docs/stress_test_results.json
+**/stress_test_results.json
 
 # OS
 .DS_Store
@@ -128,6 +182,8 @@ reports/
 frontend/out/
 frontend/dist/
 frontend/.next/
+frontend/.next-verify/
+frontend/tsconfig.tsbuildinfo
 
 # Backend
 backend/.pytest_cache/
@@ -143,3 +199,16 @@ app.ps1
 # Runtime/cache folders
 frontend/.run/
 backend/storage/
+
+# Ignore downloaded resumes/storage
+storage/resumes/
+
+# Local project launchers / generated state
+*.ps1
+*.bat
+*.cmd
+*.code-workspace
+
+# Keep example env files tracked even though local env files are ignored
+!**/.env.example
+!**/.env.sample

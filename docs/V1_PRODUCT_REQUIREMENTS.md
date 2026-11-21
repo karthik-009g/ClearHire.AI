@@ -21,7 +21,7 @@
 - Expected load:
   - Launch: 5-20 concurrent users.
   - 6 months: up to 100 users.
-- Authentication: optional in V1 to accelerate delivery.
+- Authentication: required in the current implementation.
 - Multi-tenancy: not required in V1.
 
 ## 3. AI and Analysis Strategy
@@ -36,7 +36,7 @@
 ## 4. Data and Storage
 - Database: PostgreSQL.
 - Resume storage: required.
-- Retention: 30 days.
+- Retention: 15 days.
 - Version history: required.
 - Audit logs: minimal basic tracking.
 - File storage:

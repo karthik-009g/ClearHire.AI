@@ -12,7 +12,10 @@ from sqlalchemy.pool import StaticPool
 from app.api import applications, resumes
 from app.database import Base, get_db
 from app.services import parser_service as parser_module
+from app.services.matcher_service import ResumeMatcherService
+from app.services.rag_service import ReconciledRAGService
 from app.utils.config import settings
+from app.utils.rate_limit import _RATE_STORE
 
 
 def _build_docx_bytes(text: str = "Sample resume") -> bytes:
@@ -25,6 +28,11 @@ def _build_docx_bytes(text: str = "Sample resume") -> bytes:
 
 def _build_test_client() -> TestClient:
     settings.auth_enabled = False
+    settings.rate_limit_applications_per_hour = 100
+    _RATE_STORE.clear()
+    matcher = ResumeMatcherService(load_embedding_model=False)
+    resumes.matcher_service = matcher
+    resumes.rag_service = ReconciledRAGService(matcher_service=matcher)
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -183,9 +191,16 @@ def test_application_tracking_flow(monkeypatch):
     assert create.json()["job_title"] == "Software Engineer"
     app_id = create.json()["id"]
 
-    update = client.patch(f"/api/applications/{app_id}/status", json={"status": "applied", "notes": "Submitted"})
-    assert update.status_code == 200
-    assert update.json()["status"] == "applied"
+    update = client.post(
+        f"/api/applications/{app_id}/review",
+        json={"confirm_fields_reviewed": True, "notes": "Reviewed fields"},
+    )
+    assert update.status_code == 200, update.text
+    assert update.json()["status"] == "reviewed"
+
+    blocked = client.patch(f"/api/applications/{app_id}/status", json={"status": "applied", "notes": "Submitted"})
+    assert blocked.status_code == 400
+    assert blocked.json()["detail"]["error"] == "submission_confirmation_required"
 
     listing = client.get("/api/applications/")
     assert listing.status_code == 200

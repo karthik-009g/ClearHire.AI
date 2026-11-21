@@ -50,3 +50,57 @@ def test_get_preferences_returns_defaults_when_missing():
     assert payload["auto_schedule_enabled"] is False
     assert isinstance(payload["selected_sources"], list)
     assert len(payload["selected_sources"]) >= 1
+    assert payload["exclude_staffing_agencies"] is True
+    assert payload["max_ghosting_risk"] == "medium_and_low"
+    assert payload["direct_portals_only"] is False
+
+
+def test_upsert_and_get_preferences_with_indian_market_fields():
+    client = _build_test_client()
+
+    request_data = {
+        "preferred_email": "candidate@clearhire.ai",
+        "target_role": "Lead Backend Engineer",
+        "locations": ["Bengaluru", "Hyderabad", "Remote"],
+        "keywords": ["Python", "FastAPI", "Distributed Systems"],
+        "selected_sources": ["naukri", "linkedin"],
+        "target_companies": ["Razorpay", "Postman", "CRED", "Swiggy"],
+        "exclude_staffing_agencies": True,
+        "max_ghosting_risk": "low_only",
+        "direct_portals_only": True,
+        "max_post_age_days": 3,
+        "notice_period_days": 30,
+        "serving_notice": True,
+        "current_ctc_lpa": 28.0,
+        "expected_ctc_lpa": 42.0,
+        "work_mode": "hybrid",
+        "auto_schedule_enabled": True,
+        "schedule_time": "08:30",
+        "schedule_timezone": "Asia/Kolkata",
+        "auto_scrape_on_login": True,
+        "auto_email_after_scrape": True,
+    }
+
+    post_resp = client.post("/api/jobs/preferences", json=request_data)
+    assert post_resp.status_code == 200
+    post_payload = post_resp.json()
+    assert post_payload["target_role"] == "Lead Backend Engineer"
+    assert post_payload["target_companies"] == ["Razorpay", "Postman", "CRED", "Swiggy"]
+    assert post_payload["exclude_staffing_agencies"] is True
+    assert post_payload["max_ghosting_risk"] == "low_only"
+    assert post_payload["direct_portals_only"] is True
+    assert post_payload["notice_period_days"] == 30
+    assert post_payload["serving_notice"] is True
+    assert post_payload["current_ctc_lpa"] == 28.0
+    assert post_payload["expected_ctc_lpa"] == 42.0
+    assert post_payload["work_mode"] == "hybrid"
+
+    get_resp = client.get("/api/jobs/preferences")
+    assert get_resp.status_code == 200
+    get_payload = get_resp.json()
+    assert get_payload["target_role"] == "Lead Backend Engineer"
+    assert get_payload["target_companies"] == ["Razorpay", "Postman", "CRED", "Swiggy"]
+    assert get_payload["serving_notice"] is True
+    assert get_payload["current_ctc_lpa"] == 28.0
+    assert get_payload["expected_ctc_lpa"] == 42.0
+

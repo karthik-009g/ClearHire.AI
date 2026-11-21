@@ -87,3 +87,44 @@ def test_auth_register_login_me_when_enabled(monkeypatch):
 
     me_after_delete = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert me_after_delete.status_code == 401
+
+
+def test_auth_password_mismatch_returns_401_and_preserves_hash(monkeypatch):
+    monkeypatch.setattr(settings, "auth_enabled", True)
+    monkeypatch.setattr(auth, "run_on_login", lambda user_id: None)
+    client = _build_auth_client()
+
+    reg = client.post("/api/auth/register", json={"email": "alice@example.com", "password": "OriginalSecret123!"})
+    assert reg.status_code == 200
+
+    # Attacker tries to log in with wrong password
+    bad_login = client.post("/api/auth/login", json={"email": "alice@example.com", "password": "WrongAttackerPassword!"})
+    assert bad_login.status_code == 401
+    assert bad_login.json()["detail"] == "Invalid email or password"
+
+    # Verify original password still works (hash was not overwritten)
+    good_login = client.post("/api/auth/login", json={"email": "alice@example.com", "password": "OriginalSecret123!"})
+    assert good_login.status_code == 200
+    assert "access_token" in good_login.json()
+
+
+def test_auth_unregistered_user_returns_401_when_auto_provision_disabled(monkeypatch):
+    monkeypatch.setattr(settings, "auth_enabled", True)
+    monkeypatch.setattr(settings, "auth_auto_provision_users", False)
+    client = _build_auth_client()
+
+    login = client.post("/api/auth/login", json={"email": "unknown@example.com", "password": "AnyPassword123!"})
+    assert login.status_code == 401
+    assert login.json()["detail"] == "Invalid email or password"
+
+
+def test_auth_auto_provision_when_enabled(monkeypatch):
+    monkeypatch.setattr(settings, "auth_enabled", True)
+    monkeypatch.setattr(settings, "auth_auto_provision_users", True)
+    monkeypatch.setattr(auth, "run_on_login", lambda user_id: None)
+    client = _build_auth_client()
+
+    login = client.post("/api/auth/login", json={"email": "newuser@example.com", "password": "AutoPassword123!"})
+    assert login.status_code == 200
+    assert "access_token" in login.json()
+

@@ -36,6 +36,33 @@ function clearAuthToken() {
   setAuthToken(null);
 }
 
+function formatErrorDetail(payload) {
+  if (!payload) return "";
+  if (typeof payload.detail === "string") {
+    return payload.detail;
+  }
+  if (Array.isArray(payload.detail)) {
+    return payload.detail
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object") {
+          const loc = Array.isArray(item.loc) ? item.loc.filter((l) => l !== "body").join(".") : "";
+          const msg = item.msg || item.message || "Invalid input";
+          return loc ? `${loc}: ${msg}` : msg;
+        }
+        return String(item);
+      })
+      .join(", ");
+  }
+  if (typeof payload.detail === "object" && payload.detail !== null) {
+    return JSON.stringify(payload.detail);
+  }
+  if (typeof payload.message === "string") {
+    return payload.message;
+  }
+  return JSON.stringify(payload);
+}
+
 async function request(path, options = {}) {
   const headers = {
     ...(options.headers || {}),
@@ -46,16 +73,33 @@ async function request(path, options = {}) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers,
-  });
+  let res;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers,
+    });
+  } catch (initialErr) {
+    // If calling external API_BASE failed (e.g. browser CORS or direct port block), try relative path via Next.js proxy rewrite
+    if (typeof window !== "undefined" && path.startsWith("/api")) {
+      try {
+        res = await fetch(path, {
+          ...options,
+          headers,
+        });
+      } catch {
+        throw initialErr;
+      }
+    } else {
+      throw initialErr;
+    }
+  }
 
   if (!res.ok) {
     const contentType = res.headers.get("content-type") || "";
     if (contentType.includes("application/json")) {
       const payload = await res.json();
-      const detail = payload?.detail || payload?.message || JSON.stringify(payload);
+      const detail = formatErrorDetail(payload);
       throw new Error(detail || `Request failed: ${res.status}`);
     }
 

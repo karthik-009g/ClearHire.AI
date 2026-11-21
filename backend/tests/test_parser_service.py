@@ -117,3 +117,85 @@ def test_normalize_extracted_text_merges_wrapped_lines_and_hyphen_breaks():
     normalized = ResumeParserService._normalize_extracted_text(raw)
 
     assert "techniques pipeline and validated outputs" in normalized
+
+
+def test_parse_resume_extracts_contact_links_education_and_certifications():
+    parser = ResumeParserService()
+    text = """
+    Karthik Gubba
+    karthik@example.com | +91 98765 43210
+    Bengaluru, India
+    LinkedIn: https://linkedin.com/in/karthik-gubba
+    GitHub: https://github.com/karthik-009g
+
+    Technical Proficiencies
+    Python, FastAPI, PostgreSQL, Docker
+
+    Education
+    B.Tech in Computer Science, 2023 - 2027
+
+    Certifications
+    AWS Cloud Practitioner
+
+    Projects
+    ClearHire.AI
+    - Built resume matching workflows.
+    """
+
+    parsed = parser.parse_resume(text)
+
+    assert parsed["candidate_name"] == "Karthik Gubba"
+    assert parsed["contact"]["email"] == "karthik@example.com"
+    assert parsed["contact"]["phone"] == "+919876543210"
+    assert parsed["contact"]["location"] == "Bengaluru, India"
+    assert parsed["contact"]["links"]["linkedin"]
+    assert parsed["contact"]["links"]["github"]
+    assert parsed["sections"]["education"]
+    assert parsed["sections"]["certifications"]
+    assert parsed["autofill_readiness"]["ready"] is True
+    assert parsed["autofill_readiness"]["review_required"] is True
+    assert parsed["autofill_readiness"]["missing_required_fields"] == []
+    assert parsed["parser_confidence"]["label"] in {"medium", "high"}
+
+
+def test_parse_resume_returns_warnings_for_missing_contact_and_sections():
+    parser = ResumeParserService()
+    text = """
+    Skills
+    Python, SQL
+    """
+
+    parsed = parser.parse_resume(text)
+
+    assert "email_not_found" in parsed["parser_warnings"]
+    assert "phone_not_found" in parsed["parser_warnings"]
+    assert "location_not_found" in parsed["parser_warnings"]
+    assert "education_section_not_found" in parsed["parser_warnings"]
+    assert "candidate_name" in parsed["autofill_readiness"]["missing_required_fields"]
+    assert "email" in parsed["autofill_readiness"]["missing_required_fields"]
+    assert "phone" in parsed["autofill_readiness"]["missing_required_fields"]
+    assert parsed["parser_confidence"]["label"] == "low"
+
+
+def test_parse_resume_extracts_labeled_location_for_autofill_context():
+    parser = ResumeParserService()
+    text = """
+    Priya Sharma
+    priya@example.com
+    Phone: 9876543210
+    Location: Hyderabad, India
+
+    Skills
+    Python, React, Docker
+
+    Education
+    B.Tech Computer Science
+
+    Projects
+    Portfolio Website
+    """
+
+    parsed = parser.parse_resume(text)
+
+    assert parsed["contact"]["location"] == "Hyderabad, India"
+    assert parsed["autofill_readiness"]["ready"] is True

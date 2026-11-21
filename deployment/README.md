@@ -1,234 +1,124 @@
 # Deployment Segment
 
 ## Overview
-Complete deployment infrastructure and configuration for development, staging, and production environments.
+This folder contains the local container foundation and staged production architecture for ClearHire.AI. The project is still intentionally local-first by default, but the deployment assets below document a production shape that can be run in AWS or Kubernetes without hard-coding secrets or cloud-only assumptions.
 
-## Structure
+## Target AWS production architecture
 
-```
-deployment/
-├── docker/
-│   ├── Dockerfile              # Backend image
-│   ├── docker-compose.yml      # Local dev stack
-│   ├── docker-compose.prod.yml # Production stack
-│   ├── .dockerignore
-│   ├── nginx.conf              # Reverse proxy config
-│   └── init-db.sql             # Database initialization
-│
-├── aws/
-│   ├── terraform/
-│   │   ├── main.tf             # VPC, networking
-│   │   ├── backend.tf          # Backend service
-│   │   ├── database.tf         # RDS PostgreSQL
-│   │   ├── storage.tf          # S3 buckets
-│   │   ├── cdn.tf              # CloudFront CDN
-│   │   ├── security.tf         # Security groups
-│   │   ├── variables.tf        # Input variables
-│   │   ├── outputs.tf          # Output values
-│   │   └── terraform.tfvars    # Configuration
-│   │
-│   └── scripts/
-│       ├── deploy.sh           # Deployment script
-│       ├── health-check.sh     # Health monitoring
-│       └── backup.sh           # Database backups
-│
-├── kubernetes/
-│   ├── namespace.yaml          # K8s namespace
-│   ├── configmap.yaml          # App configuration
-│   ├── secrets.yaml            # Sensitive data
-│   ├── backend-deployment.yaml # Backend pods
-│   ├── postgres-deployment.yaml # Database
-│   ├── redis-deployment.yaml   # Cache layer
-│   ├── service.yaml            # ClusterIP service
-│   ├── ingress.yaml            # Load balancer
-│   └── hpa.yaml                # Auto-scaling
-│
-├── monitoring/
-│   ├── prometheus.yml          # Metrics config
-│   ├── grafana-dashboards.json # Grafana setup
-│   └── alerts.yaml             # Alert rules
-│
-└── ci-cd/
-    ├── .github/workflows/
-    │   ├── build.yml           # Build & test
-    │   ├── deploy-dev.yml      # Deploy to dev
-    │   ├── deploy-prod.yml     # Deploy to prod
-    │   └── security-scan.yml   # Security checks
-    └── gitlab-ci.yml           # GitLab CI alternative
-```
+- Frontend: Next.js in ECS/Fargate or EC2 with CloudFront in front of it
+- Backend: FastAPI service in ECS/Fargate or App Runner/ECS, exposing port 8000
+- Database: Amazon RDS PostgreSQL
+- Cache: Amazon ElastiCache Redis
+- Object storage: S3-compatible storage for uploaded resumes and exported artifacts
+- Secrets: AWS Secrets Manager or SSM Parameter Store
+- Logs: CloudWatch logs + structured JSON logs from the API
+- Monitoring: health checks, readiness checks, alerting on 5xxs and queue backlogs
 
-## Deployment Options
+Recommended deployment flow:
 
-### Option 1: Docker Compose (Development)
-**Best for:** Local development, testing
+1. Store secrets in AWS Secrets Manager.
+2. Deploy PostgreSQL and Redis as managed services.
+3. Keep the application in a non-root container image with env-based configuration.
+4. Configure health/readiness probes to `/health` and `/ready`.
+5. Use separate production env values for `ENVIRONMENT=production`, `DEBUG=false`, and explicit S3/Redis configuration.
+
+## Local docker workflow
 
 ```bash
-cd docker
-docker-compose up -d
-# Backend: http://localhost:8000
-# Frontend: http://localhost:3000
-# PostgreSQL: localhost:5432
-# Redis: localhost:6379
+cd job_automate/deployment/docker
+docker compose up --build
 ```
 
-### Option 2: AWS (Production)
-**Infrastructure:**
-- **Compute:** EC2 + Auto Scaling Group
-- **Database:** RDS PostgreSQL
-- **Storage:** S3 for resumes & files
-- **CDN:** CloudFront for static assets
-- **Load Balancer:** ALB + Route53
-- **Container Registry:** ECR
-- **Monitoring:** CloudWatch + SNS alerts
+Endpoints:
 
-**Deployment Steps:**
-```bash
-cd aws/terraform
-terraform init
-terraform plan
-terraform apply
-```
+- Backend: http://localhost:8000
+- Frontend: http://localhost:3000
+- PostgreSQL: localhost:5432
+- Redis: localhost:6379
 
-**Or use Lambda (Serverless):**
-- AWS Lambda for API
-- RDS for database
-- S3 for storage
-- API Gateway for routing
+## Production config example
 
-### Option 3: Kubernetes
-**For:** Scalable, cloud-agnostic deployment
+Use placeholders only. Never commit real credentials. See [job_automate/backend/.env.example](../backend/.env.example) and [job_automate/frontend/.env.example](../frontend/.env.example).
 
-```bash
-cd kubernetes
-kubectl apply -f namespace.yaml
-kubectl apply -f configmap.yaml
-kubectl apply -f secrets.yaml
-kubectl apply -f postgres-deployment.yaml
-kubectl apply -f backend-deployment.yaml
-kubectl apply -f frontend-deployment.yaml
-kubectl apply -f ingress.yaml
-```
-
-## Environment Configuration
-
-### Development (.env.dev)
-```
-DATABASE_URL=postgresql://user:pass@postgres:5432/job_automation
-REDIS_URL=redis://redis:6379/0
-DEBUG=true
-ENVIRONMENT=development
-CLAUDE_API_KEY=sk-ant-xxxx
-```
-
-### Production (.env.prod)
-```
-DATABASE_URL=postgresql://user:pass@rds-endpoint:5432/job_automation
-REDIS_URL=redis://elasticache-endpoint:6379/0
-DEBUG=false
+```env
 ENVIRONMENT=production
-CLAUDE_API_KEY=sk-ant-xxxx
-SENTRY_DSN=https://xxxx@sentry.io/xxxx
+DEBUG=false
+SECRET_KEY=replace-with-a-random-secret
+DATABASE_URL=postgresql://user:pass@prod-db.endpoint:5432/job_automation
+REDIS_URL=redis://prod-cache.endpoint:6379/0
+STORAGE_PROVIDER=s3
+STORAGE_BUCKET=clearhire-prod-storage
+STORAGE_REGION=us-east-1
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
 ```
+
+## AWS deployment checklist
+
+- [ ] RDS database created with backups enabled
+- [ ] Redis cache configured with TLS enabled
+- [ ] S3 bucket created with private access and lifecycle rules
+- [ ] Secrets Manager values populated for DB, Redis, and API keys
+- [ ] CI workflow passes before deploying
+- [ ] Docker images built, scanned, and published to a container registry
+- [ ] Health checks pass for backend and frontend
+- [ ] CloudWatch log groups established
+- [ ] Alerting configured for 5xx errors and failed jobs
+- [ ] Backups and restore procedure documented
+
+## Kubernetes foundation
+
+The repo contains minimal manifests under [job_automate/deployment/kubernetes](kubernetes). These are starter manifests, not a fully managed cluster deployment.
+
+## Production safety notes
+
+- Local development defaults remain in place.
+- Production validation fails fast if required config is missing.
+- No app secrets are committed to source.
+- Resume content and uploaded file payloads are never intentionally logged in the application layer.
+
+## Monitoring and observability
+
+The backend now exposes:
+
+- `/health` for service health
+- `/ready` for dependency readiness
+- `/metrics` for Prometheus request counters and latency histograms (per process/pod)
+
+A request ID can be passed as `X-Request-ID` and is echoed back in headers and response payloads. Structured logs include request metadata without raw resume payloads or secrets.
+
+## CI/CD gates
+
+GitHub Actions runs the backend test suite, frontend production build, Docker Compose configuration check, and strict Kubernetes schema validation on pushes to `main`/`master` and pull requests. This is continuous integration only: it does not publish images or deploy to AWS. The AWS architecture below and Kubernetes manifests are deployment foundations; no cloud account, infrastructure provisioning, or live deployment is configured in this repository.
 
 ## Database Migrations
 
 ```bash
-# Initialize Alembic
-alembic init alembic
-
-# Create migration
-alembic revision --autogenerate -m "Add joblistings table"
-
-# Apply migrations
+cd job_automate/backend
 alembic upgrade head
-
-# Rollback
-alembic downgrade -1
 ```
 
-## Monitoring & Logging
+## Security best practices
 
-- **Logs:** CloudWatch, ELK Stack, or Datadog
-- **Metrics:** Prometheus + Grafana
-- **Tracing:** Jaeger or AWS X-Ray
-- **Alerts:** SNS, PagerDuty integration
+- Secrets are passed via environment variables or AWS Secrets Manager.
+- `.env` files are excluded from source control.
+- API keys are hashed before persistence and never logged.
+- Production config validation fails fast if required values are absent.
 
-## Backup & Disaster Recovery
-
-- **Database Backups:** Daily automated RDS snapshots
-- **Storage Backups:** S3 versioning enabled
-- **Recovery Time Objective (RTO):** < 1 hour
-- **Recovery Point Objective (RPO):** < 15 minutes
-
-## Security Best Practices
-
-✅ SSL/TLS certificates (AWS ACM)
-✅ VPC with private subnets
-✅ Security groups with minimal ports
-✅ Secrets management (AWS Secrets Manager)
-✅ WAF (Web Application Firewall)
-✅ DDoS protection (AWS Shield)
-✅ Regular security audits
-
-## Cost Optimization
-
-- **On-demand resources** with Auto Scaling
-- **Reserved Instances** for baseline load
-- **S3 Intelligent-Tiering** for storage
-- **CloudFront caching** for CDN
-- **RDS automated backups** (included)
-
-## Deployment Checklist
-
-- [ ] All secrets in Secrets Manager
-- [ ] Database migrations tested
-- [ ] Health checks configured
-- [ ] Monitoring & alerts active
-- [ ] Backup strategy verified
-- [ ] SSL certificates valid
-- [ ] Load testing completed
-- [ ] Security scan passed
-- [ ] Runbooks documented
-- [ ] Team trained on deployment
-
-## Rollback Procedure
+## Rollback procedure
 
 ```bash
-# For Docker Compose
-docker-compose down
-git checkout previous-tag
-docker-compose up -d
+# Local Docker
+cd job_automate/deployment/docker
+docker compose down
 
-# For AWS
-./scripts/deploy.sh --rollback --version=previous-tag
-
-# For Kubernetes
-kubectl rollout undo deployment/backend
-kubectl rollout undo deployment/frontend
+# Kubernetes
+kubectl rollout undo deployment/clearhire-backend
+kubectl rollout undo deployment/clearhire-frontend
 ```
 
-## Post-Deployment
+## Post-deployment smoke tests
 
-1. **Health Checks**
-   ```bash
-   ./scripts/health-check.sh
-   ```
-
-2. **Smoke Tests**
-   - Test login flow
-   - Test job scraping
-   - Test resume upload
-   - Test application submission
-
-3. **Monitor**
-   - Check CPU, Memory, Network
-   - Monitor API response times
-   - Track error rates
-   - Monitor database connections
-
-## Support & Documentation
-
-- See parent `README.md` for overview
-- AWS setup: `aws/terraform/README.md`
-- K8s setup: `kubernetes/README.md`
-- Monitoring: `monitoring/README.md`
+- Test backend health and readiness endpoints
+- Test frontend home page loads
+- Test resume upload path with a small sample file
+- Confirm logs show request IDs and no raw secret data

@@ -10,9 +10,16 @@ from app.models import Resume
 from app.services.storage import StorageProvider
 
 
-def cleanup_expired_resumes(db: Session, storage: StorageProvider) -> tuple[int, int]:
+def cleanup_expired_resumes(
+    db: Session,
+    storage: StorageProvider,
+    user_id: str | None = None,
+) -> tuple[int, int]:
     now = datetime.now(timezone.utc).replace(tzinfo=None)
-    expired = db.query(Resume).filter(Resume.expires_at <= now).all()
+    query = db.query(Resume).filter(Resume.expires_at <= now)
+    if user_id is not None:
+        query = query.filter(Resume.user_id == user_id)
+    expired = query.all()
 
     deleted_files = 0
     deleted_records = 0

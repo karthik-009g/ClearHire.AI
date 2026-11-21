@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import "../styles/globals.css";
+import "../styles/clearhire-spatial.css";
 
 export default function App({ Component, pageProps }) {
   const cursorOuterRef = useRef(null);

@@ -6,7 +6,7 @@
   - extensions: pdf, docx
   - size <= 10 MB
 - Add parser services for PDF and DOCX.
-- Add 30-day retention cleanup command/script.
+- Add 15-day retention cleanup command/script.
 
 ## Phase 2 - Matching Engine
 - Implement keyword overlap extractor and weighted scoring.
@@ -38,5 +38,5 @@
 - JD-resume score with explainable components available in UI.
 - Tailored resume output generated in controlled style.
 - Job tracking state update works.
-- Retention cleanup for 30 days enforced.
+- Retention cleanup for 15 days enforced.
 - No raw resume text in application logs.

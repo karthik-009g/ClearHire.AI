@@ -19,3 +19,11 @@ export async function scrapeJobs(payload) {
     body: JSON.stringify(payload),
   });
 }
+
+export async function verifyJobUrl(url, company) {
+  return request("/api/jobs/verify-url", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url, company }),
+  });
+}
