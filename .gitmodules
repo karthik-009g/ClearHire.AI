@@ -1,0 +1,3 @@
+[submodule "job_automate"]
+	path = job_automate
+	url = https://github.com/karthik-009g/ClearHire.AI.git
