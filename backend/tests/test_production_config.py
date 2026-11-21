@@ -4,6 +4,12 @@ from pydantic import ValidationError
 from app.utils.config import Settings
 
 
+@pytest.fixture(autouse=True)
+def clean_env(monkeypatch):
+    for key in ["DEBUG", "AUTH_ENABLED", "SECRET_KEY", "DATABASE_URL", "CORS_ALLOWED_ORIGINS"]:
+        monkeypatch.delenv(key, raising=False)
+
+
 def test_production_settings_reject_development_defaults():
     with pytest.raises(ValidationError) as error:
         Settings(_env_file=None, environment="production")

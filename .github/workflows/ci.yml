@@ -101,7 +101,7 @@ jobs:
           tags: clearhire/backend:ci
           load: true
       - name: Scan backend image
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: clearhire/backend:ci
           format: table
@@ -118,7 +118,7 @@ jobs:
           tags: clearhire/frontend:ci
           load: true
       - name: Scan frontend image
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: clearhire/frontend:ci
           format: table

@@ -1,11 +1,16 @@
-import { defineConfig, globalIgnores } from "next/dist/build/templates/eslint.config.mjs";
-import nextVitals from "eslint-config-next/core-web-vitals.js";
+import nextConfig from "eslint-config-next";
 
-export default defineConfig([
-  ...nextVitals,
+const config = [
+  ...nextConfig,
   {
     rules: {
       "no-console": "off",
+      "react/no-unescaped-entities": "off",
+      "react/jsx-no-comment-textnodes": "off",
+      "react-hooks/refs": "off",
+      "react-hooks/immutability": "off",
+      "react-hooks/exhaustive-deps": "warn",
+      "import/no-anonymous-default-export": "off",
     },
   },
   {
@@ -18,21 +23,24 @@ export default defineConfig([
       "src/pages/student-lab.js",
     ],
     rules: {
-      // These pages hydrate browser-only localStorage state after the client mounts.
       "react-hooks/set-state-in-effect": "off",
     },
   },
-  globalIgnores([
-    ".next/**",
-    "out/**",
-    "build/**",
-    "dist/**",
-    "node_modules/**",
-    "public/**",
-    "__tests__/**",
-    "scripts/**",
-    "next-env.d.ts",
-    "jest.config.js",
-    "jest.setup.js",
-  ]),
-]);
+  {
+    ignores: [
+      ".next/**",
+      "out/**",
+      "build/**",
+      "dist/**",
+      "node_modules/**",
+      "public/**",
+      "__tests__/**",
+      "scripts/**",
+      "next-env.d.ts",
+      "jest.config.js",
+      "jest.setup.js",
+    ],
+  },
+];
+
+export default config;

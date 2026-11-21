@@ -5,7 +5,7 @@ $candidates = @(
 	(Join-Path $PSScriptRoot "..\..\.venv\Scripts\python.exe"),
 	(Join-Path $PSScriptRoot "..\.venv\Scripts\python.exe"),
 	(Join-Path $PSScriptRoot ".venv\Scripts\python.exe"),
-	"C:/Users/gubba/AppData/Local/Microsoft/WindowsApps/python3.11.exe"
+	(Join-Path $env:LOCALAPPDATA "Microsoft\WindowsApps\python3.11.exe")
 )
 
 $python = $null

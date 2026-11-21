@@ -1,7 +1,7 @@
 # EGM Review Loop Protocol Report: ClearHire.AI Testing & Architecture Spec
 
 **Target Document:** `docs/CLEARHIRE_TESTING_AND_ARCHITECTURE_SPEC.md`  
-**Review Driver:** `C:\Users\gubba\.gemini\config\plugins\egm\skills\egm-review-loop\SKILL.md`  
+**Review Driver:** `.gemini/plugins/egm-review-loop/SKILL.md`  
 **Participating Personas:**
 1. `egm-implementation-readiness` (mapped to `resources/document_standards/implementation-readiness-standard.md`)
 2. `egm-codebase-details` (mapped to `resources/document_standards/re-implementation-standard.md`)  
